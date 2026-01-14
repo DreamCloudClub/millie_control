@@ -6,6 +6,22 @@ A cross-platform Flutter app for controlling ROS-based robots with AI-powered vo
 ![Dart](https://img.shields.io/badge/Dart-3.9+-0175C2?logo=dart)
 ![License](https://img.shields.io/badge/License-Educational_Use-blue)
 
+---
+
+### 🌐 Learn more at **https://DreamCloudClub.org**
+
+This project is part of the **Millie Bot** ecosystem — an educational robotics platform for learning ROS, Flutter, and AI integration:
+
+| Project | Description |
+|---------|-------------|
+| **Millie Bot** | The ROS-powered robot hardware and navigation stack |
+| **Millie Control** | This app — remote control interface for Millie Bot |
+| **Millie AI** | Interactive face and personality display for the robot |
+
+*More project links coming soon!*
+
+---
+
 ![Millie Robot](screenshots/millie_bot.JPG)
 
 ## Screenshots
