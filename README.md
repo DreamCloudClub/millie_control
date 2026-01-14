@@ -104,11 +104,10 @@ OPENAI_API_KEY=sk-your-api-key-here
 
 ### 4. Configure robot connection
 
-Update the robot IP address in `lib/pages/home_page.dart`:
+Update your robot's IP address in `lib/config/robot_config.dart`:
 
 ```dart
-robotApi = RobotApi("http://YOUR_ROBOT_IP:5050");
-rosBridge = RosBridge("ws://YOUR_ROBOT_IP:9090");
+static const String robotIP = '192.168.1.14';  // ← Your robot's IP
 ```
 
 ### 5. Run the app

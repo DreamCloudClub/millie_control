@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/robot_config.dart';
 import '../utils/constants.dart';
 import '../utils/rosbridge.dart';
 import '../utils/robot_api.dart';
@@ -42,8 +43,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    robotApi = RobotApi("http://192.168.1.14:5050");
-    rosBridge = RosBridge("ws://192.168.1.14:9090");
+    robotApi = RobotApi(RobotConfig.apiUrl);
+    rosBridge = RosBridge(RobotConfig.rosbridgeUrl);
     
     // Listen for connection changes
     rosBridge.onConnectionChange = (connected) {
