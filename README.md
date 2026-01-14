@@ -4,7 +4,7 @@ A cross-platform Flutter app for controlling ROS-based robots with AI-powered vo
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.9+-02569B?logo=flutter)
 ![Dart](https://img.shields.io/badge/Dart-3.9+-0175C2?logo=dart)
-![License](https://img.shields.io/badge/License-MIT-green)
+![License](https://img.shields.io/badge/License-Educational_Use-blue)
 
 ![Millie Robot](screenshots/millie_bot.JPG)
 
@@ -130,4 +130,8 @@ lib/
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+**Educational Use Only** — This software is free for personal, educational, and hobbyist use. Commercial use is not permitted. See [LICENSE](LICENSE) for details.
+
+---
+
+Made with ❤️ by [Dream Cloud Club](https://DreamCloudClub.org)
