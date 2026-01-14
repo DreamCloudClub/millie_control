@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_joystick/flutter_joystick.dart';
-import 'package:millie_control/utils/rosbridge.dart';
+import '../config/robot_config.dart';
+import '../utils/rosbridge.dart';
 
 class ControlPanel extends StatefulWidget {
   const ControlPanel({super.key});
@@ -19,7 +20,7 @@ class _ControlPanelState extends State<ControlPanel> {
   void initState() {
     super.initState();
     // ✅ connect to ROS
-    rosBridge = RosBridge("ws://192.168.1.14:9090");
+    rosBridge = RosBridge(RobotConfig.rosbridgeUrl);
     rosBridge.connect();
   }
 

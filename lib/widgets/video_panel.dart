@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_mjpeg/flutter_mjpeg.dart';
+import '../config/robot_config.dart';
 import '../utils/constants.dart';
 
 class VideoPanel extends StatelessWidget {
   const VideoPanel({super.key});
 
-  // TODO: Make this configurable via settings
-  // Scaled down for performance: 320x240, 30% quality, 5 FPS
-  static const String _streamUrl = 'http://192.168.1.14:8080/stream?topic=/oak/rgb/image_rect&width=320&height=240&quality=30&max_age=200';
+  // Video stream from robot's web_video_server
+  static String get _streamUrl => RobotConfig.videoStreamUrl();
 
   @override
   Widget build(BuildContext context) {

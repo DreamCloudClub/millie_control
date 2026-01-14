@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../config/robot_config.dart';
 import '../utils/constants.dart';
 import '../utils/rosbridge.dart';
 import '../utils/robot_api.dart';
@@ -1404,9 +1405,9 @@ class _CameraSection extends StatelessWidget {
                   color: AppColors.background,
                   borderRadius: BorderRadius.circular(AppRadius.small),
                 ),
-                child: const Text(
-                  'http://192.168.1.14:8080/stream',
-                  style: TextStyle(color: AppColors.textMuted, fontFamily: 'monospace'),
+                child: Text(
+                  'http://${RobotConfig.robotIP}:${RobotConfig.videoPort}/stream',
+                  style: const TextStyle(color: AppColors.textMuted, fontFamily: 'monospace'),
                 ),
               ),
             ],
