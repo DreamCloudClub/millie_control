@@ -11,12 +11,12 @@ import '../widgets/map_panel.dart';
 import '../widgets/top_notification.dart';
 import 'settings_page.dart';
 import 'locations_page.dart';
-import 'tickets_page.dart';
 
 // Top-level state that persists across all rebuilds
 // Nullable to prevent hot reload from resetting values
 MainView? _persistedView;
 bool? _persistedJoystickVisible;
+RosBridge? _persistedRosBridge;
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -29,7 +29,7 @@ class _HomePageState extends State<HomePage> {
   // ROS bridge connection
   late RosBridge rosBridge;
   bool _rosbridgeConnected = false;
-  
+
   // Robot API (boot server)
   late RobotApi robotApi;
   
@@ -44,16 +44,30 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     robotApi = RobotApi(RobotConfig.apiUrl);
-    rosBridge = RosBridge(RobotConfig.rosbridgeUrl);
-    
+
+    // Use persisted rosBridge if available (survives hot reload)
+    if (_persistedRosBridge != null) {
+      rosBridge = _persistedRosBridge!;
+      _rosbridgeConnected = rosBridge.isConnected;
+    } else {
+      rosBridge = RosBridge(RobotConfig.rosbridgeUrl);
+      _persistedRosBridge = rosBridge;
+      // Load cached data first, then try to connect
+      _initializeRosBridge();
+    }
+
     // Listen for connection changes
     rosBridge.onConnectionChange = (connected) {
       if (mounted) {
         setState(() => _rosbridgeConnected = connected);
       }
     };
-    
-    // Try to connect to ROSBridge immediately (in case ROS is already running)
+  }
+
+  Future<void> _initializeRosBridge() async {
+    // Load cached data first so UI shows immediately
+    await rosBridge.loadFromCache();
+    // Then try to connect to ROS (will overwrite cache with fresh data if connected)
     rosBridge.connect();
   }
   
@@ -120,15 +134,14 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      resizeToAvoidBottomInset: true,  // Resize when keyboard appears
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: OrientationBuilder(
           builder: (context, orientation) {
             final bool isLandscape = orientation == Orientation.landscape;
-            final bool showJoystick = _joystickVisible && 
+            final bool showJoystick = _joystickVisible &&
                 _currentView != MainView.locations &&
-                _currentView != MainView.tickets &&
-                _currentView != MainView.chat && 
+                _currentView != MainView.chat &&
                 _currentView != MainView.settings;
             
             // Top bar above everything (full width, static)
@@ -226,7 +239,7 @@ class _HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Text(
-            'Millie Bot AI',
+            'Millie Control',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -268,11 +281,6 @@ class _HomePageState extends State<HomePage> {
         return const VideoPanel();
       case MainView.map:
         return MapPanel(rosBridge: rosBridge);
-      case MainView.tickets:
-        return TicketsPage(
-          rosBridge: rosBridge,
-          onBack: () {},  // No back action needed in dashboard
-        );
       case MainView.locations:
         return LocationsPage(rosBridge: rosBridge);
       case MainView.chat:

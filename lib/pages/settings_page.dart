@@ -5,6 +5,8 @@ import '../utils/constants.dart';
 import '../utils/rosbridge.dart';
 import '../utils/robot_api.dart';
 import '../widgets/top_notification.dart';
+import '../services/button_config_service.dart';
+import '../services/local_cache_service.dart';
 
 // Top-level state that persists across orientation changes
 _SettingsSection? _persistedSection;
@@ -93,21 +95,21 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   _SectionButton(
                     icon: Icons.psychology,
-                    label: 'AI Agents',
+                    label: 'Agents',
                     isActive: _currentSection == _SettingsSection.aiAgents,
                     onPressed: () => setState(() => _currentSection = _SettingsSection.aiAgents),
+                  ),
+                  _SectionButton(
+                    icon: Icons.memory,
+                    label: 'Memory',
+                    isActive: _currentSection == _SettingsSection.memory,
+                    onPressed: () => setState(() => _currentSection = _SettingsSection.memory),
                   ),
                   _SectionButton(
                     icon: Icons.videocam,
                     label: 'Camera',
                     isActive: _currentSection == _SettingsSection.camera,
                     onPressed: () => setState(() => _currentSection = _SettingsSection.camera),
-                  ),
-                  _SectionButton(
-                    icon: Icons.gamepad,
-                    label: 'Controls',
-                    isActive: _currentSection == _SettingsSection.controls,
-                    onPressed: () => setState(() => _currentSection = _SettingsSection.controls),
                   ),
                   _SectionButton(
                     icon: Icons.person,
@@ -154,17 +156,17 @@ class _SettingsPageState extends State<SettingsPage> {
         return _ProfileSection(rosBridge: widget.rosBridge);
       case _SettingsSection.aiAgents:
         return _AIAgentsSection(rosBridge: widget.rosBridge);
-      case _SettingsSection.controls:
-        return const _ControlsSection();
+      case _SettingsSection.memory:
+        return _MemorySection(rosBridge: widget.rosBridge);
       case _SettingsSection.camera:
-        return const _CameraSection();
+        return _CameraSection(rosBridge: widget.rosBridge);
       case _SettingsSection.about:
         return const _AboutSection();
     }
   }
 }
 
-enum _SettingsSection { robot, aiAgents, camera, controls, profile, about }
+enum _SettingsSection { robot, aiAgents, memory, camera, profile, about }
 
 /// Section button in sidebar
 class _SectionButton extends StatelessWidget {
@@ -306,10 +308,10 @@ class _RobotSectionState extends State<_RobotSection> {
   Future<void> _refreshConfig() async {
     setState(() => _loading = true);
     _showSnackBar('Rebuilding config...', AppColors.accent);
-    
+
     // Call the rebuild endpoint which runs colcon build and restarts ROS
     final result = await widget.robotApi.refreshConfig();
-    
+
     if (mounted) {
       setState(() => _loading = false);
       _showSnackBar(result.success ? 'Config refreshed!' : 'Failed: ${result.message}',
@@ -755,7 +757,7 @@ class _RobotModeButtonRow extends StatelessWidget {
   final VoidCallback onStop;
   final VoidCallback onRestart;
   final VoidCallback onRefresh;
-  
+
   const _RobotModeButtonRow({
     required this.currentMode,
     required this.selectedMode,
@@ -877,13 +879,13 @@ class _RobotModeButtonRow extends StatelessWidget {
             width: double.infinity,
             height: 56,
             decoration: BoxDecoration(
-              color: rosRunning 
-                  ? AppColors.surface 
+              color: rosRunning
+                  ? AppColors.surface
                   : AppColors.accent.withOpacity(0.15),
               borderRadius: BorderRadius.circular(AppRadius.medium),
               border: Border.all(
-                color: rosRunning 
-                    ? AppColors.border 
+                color: rosRunning
+                    ? AppColors.border
                     : AppColors.accent,
                 width: 2,
               ),
@@ -892,8 +894,8 @@ class _RobotModeButtonRow extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.change_circle, 
-                  color: rosRunning ? AppColors.textMuted : AppColors.accent, 
+                  Icons.change_circle,
+                  color: rosRunning ? AppColors.textMuted : AppColors.accent,
                   size: 28,
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -909,7 +911,7 @@ class _RobotModeButtonRow extends StatelessWidget {
             ),
           ),
         ),
-        
+
       ],
     );
   }
@@ -1254,10 +1256,8 @@ class _RobotLogViewer extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Container(
-            width: double.infinity,
-            color: AppColors.surface,
-            padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.sm, 0, AppSpacing.sm, AppSpacing.sm),
             child: SingleChildScrollView(
               reverse: true,
               child: Text(
@@ -1276,91 +1276,39 @@ class _RobotLogViewer extends StatelessWidget {
   }
 }
 
-/// Controls section - quick buttons editor
-class _ControlsSection extends StatelessWidget {
-  const _ControlsSection();
+/// Camera section
+class _CameraSection extends StatefulWidget {
+  final RosBridge rosBridge;
+
+  const _CameraSection({required this.rosBridge});
 
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(left: AppSpacing.lg, right: AppSpacing.lg, top: AppSpacing.xl, bottom: AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _SectionHeader(title: 'Quick Buttons'),
-          const SizedBox(height: AppSpacing.md),
-          
-          // Quick button grid editor
-          _SettingsCard(
-            children: [
-              const Text(
-                'Configure the 9 programmable buttons on the control panel.',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              
-              // 3x3 preview grid
-              SizedBox(
-                height: 200,
-                child: Column(
-                  children: List.generate(3, (row) {
-                    return Expanded(
-                      child: Row(
-                        children: List.generate(3, (col) {
-                          final index = row * 3 + col;
-                          return Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.all(AppSpacing.xs),
-                              child: _QuickButtonPreview(
-                                index: index,
-                                onEdit: () => _showEditButtonDialog(context, index),
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: AppSpacing.xl),
-          const _SectionHeader(title: 'Joystick Settings'),
-          const SizedBox(height: AppSpacing.md),
-          
-          _SettingsCard(
-            children: [
-              _SliderRow(
-                label: 'Max Speed',
-                value: 0.5,
-                onChanged: (v) {},
-              ),
-              const Divider(color: AppColors.border),
-              _SliderRow(
-                label: 'Rotation Speed',
-                value: 0.7,
-                onChanged: (v) {},
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditButtonDialog(BuildContext context, int index) {
-    showDialog(
-      context: context,
-      builder: (context) => _EditButtonDialog(buttonIndex: index),
-    );
-  }
+  State<_CameraSection> createState() => _CameraSectionState();
 }
 
-/// Camera section
-class _CameraSection extends StatelessWidget {
-  const _CameraSection();
+class _CameraSectionState extends State<_CameraSection> {
+  bool _showDetectionOverlay = true;  // Default on (matches launch file)
+  bool _lowBandwidthMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final overlay = await LocalCacheService.loadDetectionOverlay();
+    final lowBandwidth = await LocalCacheService.loadLowBandwidthMode();
+    if (mounted) {
+      setState(() {
+        _showDetectionOverlay = overlay;
+        _lowBandwidthMode = lowBandwidth;
+      });
+      // Publish current settings to robot on load
+      widget.rosBridge.publishDetectionOverlay(overlay);
+      widget.rosBridge.publishLowBandwidthMode(lowBandwidth);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1371,23 +1319,31 @@ class _CameraSection extends StatelessWidget {
         children: [
           const _SectionHeader(title: 'Camera Settings'),
           const SizedBox(height: AppSpacing.md),
-          
+
           _SettingsCard(
             children: [
               _ToggleRow(
-                label: 'Show Depth Overlay',
-                value: false,
-                onChanged: (v) {},
+                label: 'Show Detection Overlay',
+                value: _showDetectionOverlay,
+                onChanged: (v) {
+                  setState(() => _showDetectionOverlay = v);
+                  widget.rosBridge.publishDetectionOverlay(v);
+                  LocalCacheService.saveDetectionOverlay(v);
+                },
               ),
               const Divider(color: AppColors.border),
               _ToggleRow(
                 label: 'Low Bandwidth Mode',
-                value: false,
-                onChanged: (v) {},
+                value: _lowBandwidthMode,
+                onChanged: (v) {
+                  setState(() => _lowBandwidthMode = v);
+                  widget.rosBridge.publishLowBandwidthMode(v);
+                  LocalCacheService.saveLowBandwidthMode(v);
+                },
               ),
             ],
           ),
-          
+
           const SizedBox(height: AppSpacing.xl),
           const _SectionHeader(title: 'Stream URL'),
           const SizedBox(height: AppSpacing.md),
@@ -1418,122 +1374,10 @@ class _CameraSection extends StatelessWidget {
   }
 }
 
-/// Company Info section - Business details
-// Daily hours for a single day
-class DailyHours {
-  final String day;
-  TimeOfDay? openTime;
-  TimeOfDay? closeTime;
-  bool isClosed;
-  
-  DailyHours({
-    required this.day,
-    this.openTime,
-    this.closeTime,
-    this.isClosed = false,
-  });
-  
-  String get displayText {
-    if (isClosed) return 'Closed';
-    if (openTime == null || closeTime == null) return 'Not set';
-    return '${_formatTime(openTime!)} - ${_formatTime(closeTime!)}';
-  }
-  
-  static String _formatTime(TimeOfDay time) {
-    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
-    final minute = time.minute.toString().padLeft(2, '0');
-    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
-    return '$hour:$minute $period';
-  }
-  
-  DailyHours copy() => DailyHours(
-    day: day,
-    openTime: openTime,
-    closeTime: closeTime,
-    isClosed: isClosed,
-  );
-}
-
-// Company policy
-class CompanyPolicy {
-  String title;
-  String description;
-  
-  CompanyPolicy({
-    this.title = '',
-    this.description = '',
-  });
-  
-  CompanyPolicy copy() => CompanyPolicy(title: title, description: description);
-}
-
-// Persisted company info data
-class CompanyInfo {
-  // Robot identity
-  String robotName;
-  String robotIdentity;
-  String basePersonality;
-  String baseSystemInstructions;
-  String voice;
-  
-  // Business info
-  String companyName;
-  String address;
-  String phone;
-  List<DailyHours> hours;
-  List<CompanyPolicy> policies;
-  
-  CompanyInfo({
-    this.robotName = '',
-    String? robotIdentity,
-    String? basePersonality,
-    String? baseSystemInstructions,
-    this.voice = 'nova',
-    this.companyName = '',
-    this.address = '',
-    this.phone = '',
-    List<DailyHours>? hours,
-    List<CompanyPolicy>? policies,
-  }) : robotIdentity = robotIdentity ?? _defaultRobotIdentity,
-       basePersonality = basePersonality ?? _defaultBasePersonality,
-       baseSystemInstructions = baseSystemInstructions ?? _defaultBaseSystemInstructions,
-       hours = hours ?? _defaultHours(),
-       policies = policies ?? [];
-  
-  // Default robot identity context
-  static const String _defaultRobotIdentity = '''You are a friendly service robot. You are a physical robot with wheels, not a chatbot or language model. You can navigate physical spaces and interact with people through voice conversation. You cannot browse the internet or access external systems beyond your local knowledge.''';
-  
-  // Default personality
-  static const String _defaultBasePersonality = '''You are friendly, helpful, and professional. You speak clearly and concisely. You maintain a warm but efficient tone. You are patient and understanding with customers.''';
-  
-  // Default system instructions  
-  static const String _defaultBaseSystemInstructions = '''Keep responses brief and conversational - aim for 1-2 sentences when possible. If you don't know something, say so honestly and offer alternatives. Always be polite and respectful. If a request is beyond your capabilities, offer to get a human staff member.''';
-  
-  static List<DailyHours> _defaultHours() => [
-    DailyHours(day: 'Sunday'),
-    DailyHours(day: 'Monday'),
-    DailyHours(day: 'Tuesday'),
-    DailyHours(day: 'Wednesday'),
-    DailyHours(day: 'Thursday'),
-    DailyHours(day: 'Friday'),
-    DailyHours(day: 'Saturday'),
-  ];
-  
-  bool get isEmpty => robotName.isEmpty && companyName.isEmpty && address.isEmpty && phone.isEmpty && 
-    hours.every((h) => h.openTime == null && h.closeTime == null && !h.isClosed) &&
-    policies.isEmpty;
-    
-  bool get hasHours => hours.any((h) => h.openTime != null || h.closeTime != null || h.isClosed);
-  
-  // Voice options for OpenAI TTS
-  static const List<String> voiceOptions = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
-}
-
-CompanyInfo _savedCompanyInfo = CompanyInfo();
-
+/// Profile section - User profile synced from robot
 class _ProfileSection extends StatefulWidget {
   final RosBridge rosBridge;
-  
+
   const _ProfileSection({required this.rosBridge});
 
   @override
@@ -1541,271 +1385,80 @@ class _ProfileSection extends StatefulWidget {
 }
 
 class _ProfileSectionState extends State<_ProfileSection> {
+  UserProfile? _userProfile;
   bool _isEditing = false;
-  int? _editingPolicyIndex; // null = not editing, -1 = adding new
-  
-  final _robotNameController = TextEditingController();
-  final _robotIdentityController = TextEditingController();
-  final _basePersonalityController = TextEditingController();
-  final _baseSystemInstructionsController = TextEditingController();
-  String _selectedVoice = 'nova';
-  
-  final _companyNameController = TextEditingController();
-  final _addressController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _policyTitleController = TextEditingController();
-  final _policyDescController = TextEditingController();
-  
-  List<DailyHours> _editingHours = [];
-  List<CompanyPolicy> _editingPolicies = [];
-  
-  // Multi-listener callback (for cleanup)
-  late final void Function(CompanyInfoData) _companyInfoListener;
+
+  final _usernameController = TextEditingController();
+  final _pronounsController = TextEditingController();
+  final _bioController = TextEditingController();
+
+  late final void Function(UserProfile) _userProfileListener;
 
   @override
   void initState() {
     super.initState();
-    _setupRosCallback();
-    _requestCompanyInfo();
-    _loadSavedData();
+    _setupListener();
+    widget.rosBridge.requestUserProfile();
   }
-  
-  @override
-  void dispose() {
-    widget.rosBridge.removeCompanyInfoListener(_companyInfoListener);
-    _robotNameController.dispose();
-    _robotIdentityController.dispose();
-    _basePersonalityController.dispose();
-    _baseSystemInstructionsController.dispose();
-    _companyNameController.dispose();
-    _addressController.dispose();
-    _phoneController.dispose();
-    _policyTitleController.dispose();
-    _policyDescController.dispose();
-    super.dispose();
-  }
-  
-  void _setupRosCallback() {
-    // Multi-listener pattern
-    _companyInfoListener = (info) {
-      // Convert from ROS format to local format
-      _savedCompanyInfo = CompanyInfo(
-        robotName: info.robotName,
-        robotIdentity: info.robotIdentity.isNotEmpty ? info.robotIdentity : null,
-        basePersonality: info.basePersonality.isNotEmpty ? info.basePersonality : null,
-        baseSystemInstructions: info.baseSystemInstructions.isNotEmpty ? info.baseSystemInstructions : null,
-        voice: info.voice,
-        companyName: info.companyName,
-        address: info.address,
-        phone: info.phone,
-        hours: info.hours.map((h) => DailyHours(
-          day: h.day,
-          openTime: _parseTimeString(h.openTime),
-          closeTime: _parseTimeString(h.closeTime),
-          isClosed: h.isClosed,
-        )).toList(),
-        policies: info.policies.map((p) => CompanyPolicy(
-          title: p.title,
-          description: p.description,
-        )).toList(),
-      );
+
+  void _setupListener() {
+    _userProfileListener = (profile) {
       if (mounted && !_isEditing) {
-        setState(() {});
+        setState(() {
+          _userProfile = profile;
+          _usernameController.text = profile.username;
+          _pronounsController.text = profile.pronouns;
+          _bioController.text = profile.bio;
+        });
       }
     };
-    widget.rosBridge.addCompanyInfoListener(_companyInfoListener);
+    widget.rosBridge.addUserProfileListener(_userProfileListener);
   }
-  
-  TimeOfDay? _parseTimeString(String? timeStr) {
-    if (timeStr == null || timeStr.isEmpty) return null;
-    try {
-      // Parse time like "9:00 AM" or "5:30 PM"
-      final parts = timeStr.split(' ');
-      if (parts.length != 2) return null;
-      final timeParts = parts[0].split(':');
-      if (timeParts.length != 2) return null;
-      var hour = int.parse(timeParts[0]);
-      final minute = int.parse(timeParts[1]);
-      final isPM = parts[1].toUpperCase() == 'PM';
-      if (isPM && hour != 12) hour += 12;
-      if (!isPM && hour == 12) hour = 0;
-      return TimeOfDay(hour: hour, minute: minute);
-    } catch (e) {
-      return null;
-    }
-  }
-  
-  void _requestCompanyInfo() {
-    widget.rosBridge.requestCompanyInfo();
-  }
-  
-  void _loadSavedData() {
-    // Robot identity
-    _robotNameController.text = _savedCompanyInfo.robotName;
-    _robotIdentityController.text = _savedCompanyInfo.robotIdentity;
-    _basePersonalityController.text = _savedCompanyInfo.basePersonality;
-    _baseSystemInstructionsController.text = _savedCompanyInfo.baseSystemInstructions;
-    _selectedVoice = _savedCompanyInfo.voice;
-    
-    // Business info
-    _companyNameController.text = _savedCompanyInfo.companyName;
-    _addressController.text = _savedCompanyInfo.address;
-    _phoneController.text = _savedCompanyInfo.phone;
-    // Use saved hours if available, otherwise use default 7-day schedule
-    _editingHours = _savedCompanyInfo.hours.isNotEmpty 
-        ? _savedCompanyInfo.hours.map((h) => h.copy()).toList()
-        : CompanyInfo._defaultHours();
-    _editingPolicies = _savedCompanyInfo.policies.map((p) => p.copy()).toList();
+
+  @override
+  void dispose() {
+    widget.rosBridge.removeUserProfileListener(_userProfileListener);
+    _usernameController.dispose();
+    _pronounsController.dispose();
+    _bioController.dispose();
+    super.dispose();
   }
 
   void _enterEditMode() {
-    _loadSavedData();
-    setState(() {
-      _isEditing = true;
-      _editingPolicyIndex = null;
-    });
+    setState(() => _isEditing = true);
   }
 
   void _save() {
-    // Save to persistent state
-    _savedCompanyInfo = CompanyInfo(
-      robotName: _robotNameController.text,
-      robotIdentity: _robotIdentityController.text,
-      basePersonality: _basePersonalityController.text,
-      baseSystemInstructions: _baseSystemInstructionsController.text,
-      voice: _selectedVoice,
-      companyName: _companyNameController.text,
-      address: _addressController.text,
-      phone: _phoneController.text,
-      hours: _editingHours.map((h) => h.copy()).toList(),
-      policies: _editingPolicies.map((p) => p.copy()).toList(),
+    final profile = UserProfile(
+      username: _usernameController.text.trim(),
+      pronouns: _pronounsController.text.trim(),
+      bio: _bioController.text.trim(),
     );
-    
-    // Save to robot via ROS
-    print("💾 Saving profile info to robot...");
-    final rosInfo = CompanyInfoData(
-      robotName: _savedCompanyInfo.robotName,
-      robotIdentity: _savedCompanyInfo.robotIdentity,
-      basePersonality: _savedCompanyInfo.basePersonality,
-      baseSystemInstructions: _savedCompanyInfo.baseSystemInstructions,
-      voice: _savedCompanyInfo.voice,
-      companyName: _savedCompanyInfo.companyName,
-      address: _savedCompanyInfo.address,
-      phone: _savedCompanyInfo.phone,
-      hours: _savedCompanyInfo.hours.map((h) => DailyHoursData(
-        day: h.day,
-        openTime: h.openTime != null ? DailyHours._formatTime(h.openTime!) : null,
-        closeTime: h.closeTime != null ? DailyHours._formatTime(h.closeTime!) : null,
-        isClosed: h.isClosed,
-      )).toList(),
-      policies: _savedCompanyInfo.policies.map((p) => PolicyData(
-        title: p.title,
-        description: p.description,
-      )).toList(),
-    );
-    widget.rosBridge.publishSaveCompanyInfo(rosInfo);
-    
-    setState(() => _isEditing = false);
+    widget.rosBridge.publishSaveUserProfile(profile);
+    setState(() {
+      _userProfile = profile;
+      _isEditing = false;
+    });
     TopNotification.show(context, message: 'Profile saved', backgroundColor: AppColors.success);
   }
-  
-  Future<void> _pickTime(DailyHours day, bool isOpen) async {
-    final initial = isOpen ? (day.openTime ?? const TimeOfDay(hour: 9, minute: 0))
-                           : (day.closeTime ?? const TimeOfDay(hour: 17, minute: 0));
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: initial,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: AppColors.accent,
-              surface: AppColors.surface,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) {
-      setState(() {
-        if (isOpen) {
-          day.openTime = picked;
-        } else {
-          day.closeTime = picked;
-        }
-        day.isClosed = false;
-      });
+
+  void _cancel() {
+    if (_userProfile != null) {
+      _usernameController.text = _userProfile!.username;
+      _pronounsController.text = _userProfile!.pronouns;
+      _bioController.text = _userProfile!.bio;
     }
-  }
-  
-  void _toggleClosed(DailyHours day) {
-    setState(() {
-      day.isClosed = !day.isClosed;
-      if (day.isClosed) {
-        day.openTime = null;
-        day.closeTime = null;
-      }
-    });
-  }
-  
-  void _startEditingPolicy(int index) {
-    final policy = _editingPolicies[index];
-    _policyTitleController.text = policy.title;
-    _policyDescController.text = policy.description;
-    setState(() => _editingPolicyIndex = index);
-  }
-  
-  void _startAddingPolicy() {
-    _policyTitleController.clear();
-    _policyDescController.clear();
-    setState(() => _editingPolicyIndex = -1);
-  }
-  
-  void _savePolicy() {
-    final title = _policyTitleController.text.trim();
-    final desc = _policyDescController.text.trim();
-    if (title.isEmpty) return;
-    
-    setState(() {
-      if (_editingPolicyIndex == -1) {
-        // Adding new
-        _editingPolicies.add(CompanyPolicy(title: title, description: desc));
-      } else if (_editingPolicyIndex != null) {
-        // Editing existing
-        _editingPolicies[_editingPolicyIndex!] = CompanyPolicy(title: title, description: desc);
-      }
-      _editingPolicyIndex = null;
-    });
-  }
-  
-  void _deletePolicy() {
-    if (_editingPolicyIndex != null && _editingPolicyIndex! >= 0) {
-      setState(() {
-        _editingPolicies.removeAt(_editingPolicyIndex!);
-        _editingPolicyIndex = null;
-      });
-    }
-  }
-  
-  void _cancelPolicyEdit() {
-    setState(() => _editingPolicyIndex = null);
+    setState(() => _isEditing = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    return _isEditing ? _buildEditView() : _buildDisplayView();
-  }
-  
-  Widget _buildDisplayView() {
-    final info = _savedCompanyInfo;
-    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header with edit button
+          // Header
           Row(
             children: [
               const Icon(Icons.person, color: AppColors.accent, size: 24),
@@ -1819,321 +1472,34 @@ class _ProfileSectionState extends State<_ProfileSection> {
                 ),
               ),
               const Spacer(),
-              GestureDetector(
-                onTap: _enterEditMode,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.sm,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(AppRadius.small),
-                    border: Border.all(color: AppColors.accent),
-                  ),
-                  child: const Text(
-                    'Edit',
-                    style: TextStyle(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.bold,
+              if (!_isEditing)
+                GestureDetector(
+                  onTap: _enterEditMode,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(AppRadius.small),
+                      border: Border.all(color: AppColors.accent),
+                    ),
+                    child: const Text(
+                      'Edit',
+                      style: TextStyle(
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
-          
-          const SizedBox(height: AppSpacing.lg),
-          
-          // Display saved info
-          if (info.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(AppRadius.medium),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Center(
-                child: Text(
-                  'No profile saved yet.\nTap Edit to add your robot and business details.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            )
-          else ...[
-            // Robot section container
-            _buildSectionHeader('Robot', Icons.smart_toy),
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(AppRadius.medium),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (info.robotName.isNotEmpty) ...[
-                    _buildDisplayField('Robot Name', info.robotName),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  _buildDisplayField('Voice', '${info.voice.substring(0, 1).toUpperCase()}${info.voice.substring(1)} - ${_getVoiceDescription(info.voice)}'),
-                  const SizedBox(height: AppSpacing.lg),
-                  _buildDisplayFieldTruncated('Robot Identity', info.robotIdentity),
-                  const SizedBox(height: AppSpacing.lg),
-                  _buildDisplayFieldTruncated('Base Personality', info.basePersonality),
-                  const SizedBox(height: AppSpacing.lg),
-                  _buildDisplayFieldTruncated('Base Instructions', info.baseSystemInstructions),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: AppSpacing.lg),
-            
-            // Business section container
-            _buildSectionHeader('Business', Icons.business),
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(AppRadius.medium),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (info.companyName.isNotEmpty) ...[
-                    _buildDisplayField('Company Name', info.companyName),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  if (info.address.isNotEmpty) ...[
-                    _buildDisplayField('Address', info.address),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  if (info.phone.isNotEmpty) ...[
-                    _buildDisplayField('Phone', info.phone),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  if (info.hasHours) ...[
-                    _buildHoursDisplay(info.hours),
-                    const SizedBox(height: AppSpacing.lg),
-                  ],
-                  if (info.policies.isNotEmpty)
-                    _buildPoliciesDisplay(info.policies),
-                  if (info.companyName.isEmpty && info.address.isEmpty && info.phone.isEmpty && !info.hasHours && info.policies.isEmpty)
-                    Text(
-                      'No business info added yet.',
-                      style: TextStyle(color: AppColors.textMuted.withOpacity(0.7), fontSize: 14),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildDisplayFieldTruncated(String label, String value, {int maxLength = 80}) {
-    final truncated = value.length > maxLength 
-        ? '${value.substring(0, maxLength).trim()}...' 
-        : value;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          truncated,
-          style: TextStyle(
-            color: AppColors.textPrimary.withOpacity(0.8),
-            fontSize: 14,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-      ],
-    );
-  }
 
-  Widget _buildDisplayField(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18,
-          ),
-        ),
-      ],
-    );
-  }
-  
-  Widget _buildHoursDisplay(List<DailyHours> hours) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Hours of Operation',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        ...hours.where((h) => h.openTime != null || h.closeTime != null || h.isClosed).map((h) => Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 90,
-                child: Text(
-                  h.day,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                ),
-              ),
-              Text(
-                h.displayText,
-                style: TextStyle(
-                  color: h.isClosed ? AppColors.textMuted : AppColors.textPrimary,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        )),
-      ],
-    );
-  }
-  
-  Widget _buildPoliciesDisplay(List<CompanyPolicy> policies) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'General Policies',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        ...policies.map((p) => Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(AppRadius.small),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                p.title,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (p.description.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  p.description,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        )),
-      ],
-    );
-  }
-  
-  Widget _buildEditView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Row(
-            children: [
-              const Icon(Icons.person, color: AppColors.accent, size: 24),
-              const SizedBox(width: AppSpacing.sm),
-              const Text(
-                'Edit Profile',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              // Cancel button
-              GestureDetector(
-                onTap: () => setState(() => _isEditing = false),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.sm,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.danger.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(AppRadius.small),
-                    border: Border.all(color: AppColors.dangerBright),
-                  ),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: AppColors.dangerBright,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
           const SizedBox(height: AppSpacing.lg),
-          
-          // Robot Info section
-          _buildSectionHeader('Robot', Icons.smart_toy),
-          const SizedBox(height: AppSpacing.sm),
+
+          // Profile card
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(AppSpacing.lg),
@@ -2145,541 +1511,73 @@ class _ProfileSectionState extends State<_ProfileSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildTextField(
-                  controller: _robotNameController,
-                  label: 'Robot Name',
-                  hint: 'Enter robot name (e.g., Millie)',
-                  textCapitalization: TextCapitalization.words,
-                ),
+                _buildField('Username', _usernameController, _isEditing),
                 const SizedBox(height: AppSpacing.lg),
-                // Voice selector
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Voice',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: AppColors.background,
-                        borderRadius: BorderRadius.circular(AppRadius.small),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedVoice,
-                          isExpanded: true,
-                          dropdownColor: AppColors.surface,
-                          items: CompanyInfo.voiceOptions.map((voice) => DropdownMenuItem(
-                            value: voice,
-                            child: Text(
-                              voice.substring(0, 1).toUpperCase() + voice.substring(1),
-                              style: const TextStyle(color: AppColors.textPrimary),
+                _buildField('Pronouns', _pronounsController, _isEditing),
+                const SizedBox(height: AppSpacing.lg),
+                _buildField('Bio', _bioController, _isEditing, maxLines: 3),
+
+                if (_isEditing) ...[
+                  const SizedBox(height: AppSpacing.xl),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _cancel,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                            decoration: BoxDecoration(
+                              color: AppColors.danger.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(AppRadius.small),
+                              border: Border.all(color: AppColors.dangerBright),
                             ),
-                          )).toList(),
-                          onChanged: (value) {
-                            if (value != null) setState(() => _selectedVoice = value);
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      _getVoiceDescription(_selectedVoice),
-                      style: TextStyle(color: AppColors.textMuted.withOpacity(0.7), fontSize: 11),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _robotIdentityController,
-                  label: 'Robot Identity',
-                  hint: 'Core identity context (e.g., "You are a physical robot...")',
-                  maxLines: 5,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _basePersonalityController,
-                  label: 'Base Personality & Tone',
-                  hint: 'Foundational personality traits',
-                  maxLines: 5,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _baseSystemInstructionsController,
-                  label: 'Base System Instructions',
-                  hint: 'Core behavioral rules',
-                  maxLines: 5,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: AppSpacing.lg),
-          
-          // Business Info section
-          _buildSectionHeader('Business', Icons.business),
-          const SizedBox(height: AppSpacing.sm),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppRadius.medium),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildTextField(
-                  controller: _companyNameController,
-                  label: 'Company Name',
-                  hint: 'Enter company name',
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _addressController,
-                  label: 'Address',
-                  hint: 'Enter address',
-                  maxLines: 2,
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _phoneController,
-                  label: 'Phone',
-                  hint: 'Enter phone number',
-                  keyboardType: TextInputType.phone,
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: AppSpacing.lg),
-          
-          // Hours section
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppRadius.medium),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Hours of Operation',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                ..._editingHours.map((day) => _buildDayRow(day)),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: AppSpacing.lg),
-          
-          // Policies section
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppRadius.medium),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Text(
-                      'General Policies',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (_editingPolicyIndex == null)
-                      GestureDetector(
-                        onTap: _startAddingPolicy,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: AppSpacing.xs,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.accent.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(AppRadius.small),
-                            border: Border.all(color: AppColors.accent),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add, color: AppColors.accent, size: 16),
-                              SizedBox(width: 4),
-                              Text(
-                                'Add',
+                            child: const Center(
+                              child: Text(
+                                'Cancel',
                                 style: TextStyle(
-                                  color: AppColors.accent,
-                                  fontSize: 12,
+                                  color: AppColors.dangerBright,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                
-                // Policy editor or list
-                if (_editingPolicyIndex != null)
-                  _buildPolicyEditor()
-                else
-                  ..._editingPolicies.asMap().entries.map((e) => _buildPolicyItem(e.key, e.value)),
-                  
-                if (_editingPolicies.isEmpty && _editingPolicyIndex == null)
-                  const Center(
-                    child: Text(
-                      'No policies added yet',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-                    ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _save,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                            decoration: BoxDecoration(
+                              color: AppColors.accent.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(AppRadius.small),
+                              border: Border.all(color: AppColors.accent),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'Save',
+                                style: TextStyle(
+                                  color: AppColors.accent,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                ],
               ],
             ),
           ),
-          
-          const SizedBox(height: AppSpacing.xl),
-          
-          // Full-width Save button
-          GestureDetector(
-            onTap: _save,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.accent.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(AppRadius.small),
-                border: Border.all(color: AppColors.accent),
-              ),
-              child: const Center(
-                child: Text(
-                  'Save',
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
-    );
-  }
-  
-  Widget _buildDayRow(DailyHours day) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 90,
-            child: Text(
-              day.day,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-            ),
-          ),
-          // Open time
-          Expanded(
-            child: GestureDetector(
-              onTap: day.isClosed ? null : () => _pickTime(day, true),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: AppSpacing.sm,
-                ),
-                decoration: BoxDecoration(
-                  color: day.isClosed ? AppColors.background.withOpacity(0.5) : AppColors.background,
-                  borderRadius: BorderRadius.circular(AppRadius.small),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Text(
-                  day.openTime != null ? DailyHours._formatTime(day.openTime!) : 'Open',
-                  style: TextStyle(
-                    color: day.isClosed ? AppColors.textMuted : 
-                           (day.openTime != null ? AppColors.textPrimary : AppColors.textMuted),
-                    fontSize: 13,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-            child: Text('-', style: TextStyle(color: AppColors.textMuted)),
-          ),
-          // Close time
-          Expanded(
-            child: GestureDetector(
-              onTap: day.isClosed ? null : () => _pickTime(day, false),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: AppSpacing.sm,
-                ),
-                decoration: BoxDecoration(
-                  color: day.isClosed ? AppColors.background.withOpacity(0.5) : AppColors.background,
-                  borderRadius: BorderRadius.circular(AppRadius.small),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Text(
-                  day.closeTime != null ? DailyHours._formatTime(day.closeTime!) : 'Close',
-                  style: TextStyle(
-                    color: day.isClosed ? AppColors.textMuted : 
-                           (day.closeTime != null ? AppColors.textPrimary : AppColors.textMuted),
-                    fontSize: 13,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          // Closed toggle
-          GestureDetector(
-            onTap: () => _toggleClosed(day),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: AppSpacing.sm,
-              ),
-              decoration: BoxDecoration(
-                color: day.isClosed ? AppColors.danger.withOpacity(0.15) : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppRadius.small),
-                border: Border.all(
-                  color: day.isClosed ? AppColors.danger : AppColors.border,
-                ),
-              ),
-              child: Text(
-                'Closed',
-                style: TextStyle(
-                  color: day.isClosed ? AppColors.danger : AppColors.textMuted,
-                  fontSize: 12,
-                  fontWeight: day.isClosed ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildPolicyItem(int index, CompanyPolicy policy) {
-    return GestureDetector(
-      onTap: () => _startEditingPolicy(index),
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.circular(AppRadius.small),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    policy.title,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (policy.description.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      policy.description,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const Icon(Icons.edit, color: AppColors.textMuted, size: 18),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildPolicyEditor() {
-    final isNew = _editingPolicyIndex == -1;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(AppRadius.small),
-        border: Border.all(color: AppColors.accent),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildTextField(
-            controller: _policyTitleController,
-            label: 'Policy Title',
-            hint: 'Enter policy title',
-            textCapitalization: TextCapitalization.words,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _buildTextField(
-            controller: _policyDescController,
-            label: 'Policy Description',
-            hint: 'Describe this policy',
-            maxLines: 3,
-            textCapitalization: TextCapitalization.sentences,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          
-          // Save button
-          GestureDetector(
-            onTap: _savePolicy,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: AppColors.accent.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(AppRadius.small),
-                border: Border.all(color: AppColors.accent),
-              ),
-              child: const Center(
-                child: Text(
-                  'Save',
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          
-          // Delete button (only for existing policies)
-          if (!isNew) ...[
-            const SizedBox(height: AppSpacing.sm),
-            GestureDetector(
-              onTap: _deletePolicy,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: AppColors.danger.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(AppRadius.small),
-                  border: Border.all(color: AppColors.dangerBright),
-                ),
-                child: const Center(
-                  child: Text(
-                    'Delete',
-                    style: TextStyle(
-                      color: AppColors.dangerBright,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-          
-          const SizedBox(height: AppSpacing.sm),
-          // Cancel link
-          Center(
-            child: GestureDetector(
-              onTap: _cancelPolicyEdit,
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  String _getVoiceDescription(String voice) {
-    switch (voice) {
-      case 'alloy': return 'Neutral, balanced';
-      case 'echo': return 'Warm, conversational';
-      case 'fable': return 'British, storyteller';
-      case 'onyx': return 'Deep, authoritative';
-      case 'nova': return 'Energetic, bright';
-      case 'shimmer': return 'Soft, gentle';
-      default: return '';
-    }
-  }
-  
-  Widget _buildSectionHeader(String title, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, color: AppColors.accent, size: 18),
-        const SizedBox(width: AppSpacing.sm),
-        Text(
-          title,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    String? hint,
-    int maxLines = 1,
-    TextCapitalization textCapitalization = TextCapitalization.none,
-    TextInputType? keyboardType,
-  }) {
+  Widget _buildField(String label, TextEditingController controller, bool editable, {int maxLines = 1}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2692,38 +1590,52 @@ class _ProfileSectionState extends State<_ProfileSection> {
           ),
         ),
         const SizedBox(height: AppSpacing.xs),
-        TextField(
-          controller: controller,
-          maxLines: maxLines,
-          textCapitalization: textCapitalization,
-          keyboardType: keyboardType,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: AppColors.textMuted.withOpacity(0.5)),
-            filled: true,
-            fillColor: AppColors.background,
-            contentPadding: const EdgeInsets.all(AppSpacing.md),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.small),
-              borderSide: const BorderSide(color: AppColors.border),
+        if (editable)
+          TextField(
+            controller: controller,
+            maxLines: maxLines,
+            style: const TextStyle(color: AppColors.textPrimary),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.background,
+              contentPadding: const EdgeInsets.all(AppSpacing.md),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                borderSide: const BorderSide(color: AppColors.accent, width: 2),
+              ),
             ),
-            enabledBorder: OutlineInputBorder(
+          )
+        else
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: AppColors.background,
               borderRadius: BorderRadius.circular(AppRadius.small),
-              borderSide: const BorderSide(color: AppColors.border),
+              border: Border.all(color: AppColors.border),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.small),
-              borderSide: const BorderSide(color: AppColors.accent, width: 2),
+            child: Text(
+              controller.text.isEmpty ? '-' : controller.text,
+              style: TextStyle(
+                color: controller.text.isEmpty ? AppColors.textMuted : AppColors.textPrimary,
+              ),
             ),
           ),
-        ),
       ],
     );
   }
 }
 
-/// AI Agents section - Reusable agent configurations
+
+/// Agents section - Reusable agent configurations
 class _AIAgentsSection extends StatefulWidget {
   final RosBridge rosBridge;
   
@@ -2736,14 +1648,23 @@ class _AIAgentsSection extends StatefulWidget {
 class _AIAgentsSectionState extends State<_AIAgentsSection> {
   List<AgentDefinition> _agents = [];
   int? _editingIndex; // null = list view, -1 = new agent, >= 0 = editing existing
-  
+
   final _nameController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _systemInstructionsController = TextEditingController();
   final _personalityController = TextEditingController();
-  final _voiceStyleController = TextEditingController();
-  final _knowledgeFocusController = TextEditingController();
-  
+  final _introMessageController = TextEditingController();
+  String _selectedFaceId = '';
+  String _selectedVoice = 'nova';
+  String _voiceMode = 'turn_taking';
+  String _faceType = 'robot'; // 'robot' or 'animal'
+
+  // Available faces and voices
+  static const List<String> animalFaces = ['cat', 'dog', 'bear', 'bee', 'bird', 'crocodile', 'elephant', 'fish', 'lion', 'lobster', 'reptile', 'tiger'];
+  static const List<String> turnTakingVoices = ['alloy', 'echo', 'fable', 'nova', 'onyx', 'shimmer'];
+  static const List<String> realtimeVoices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'];
+
+  // Get voice options based on current voice mode
+  List<String> get voiceOptions => _voiceMode == 'realtime' ? realtimeVoices : turnTakingVoices;
+
   // Multi-listener callback (for cleanup)
   late final void Function(List<AgentDefinition>) _agentListener;
 
@@ -2778,32 +1699,31 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
   void dispose() {
     widget.rosBridge.removeAgentListener(_agentListener);  // Multi-listener cleanup
     _nameController.dispose();
-    _descriptionController.dispose();
-    _systemInstructionsController.dispose();
     _personalityController.dispose();
-    _voiceStyleController.dispose();
-    _knowledgeFocusController.dispose();
+    _introMessageController.dispose();
     super.dispose();
   }
   
   void _startNewAgent() {
     _nameController.clear();
-    _descriptionController.clear();
-    _systemInstructionsController.clear();
     _personalityController.clear();
-    _voiceStyleController.clear();
-    _knowledgeFocusController.clear();
+    _introMessageController.clear();
+    _selectedFaceId = 'cat';
+    _faceType = 'animal';
+    _selectedVoice = 'nova';
+    _voiceMode = 'turn_taking';
     setState(() => _editingIndex = -1);
   }
   
   void _editAgent(int index) {
     final agent = _agents[index];
     _nameController.text = agent.name;
-    _descriptionController.text = agent.description;
-    _systemInstructionsController.text = agent.systemInstructions;
     _personalityController.text = agent.personality;
-    _voiceStyleController.text = agent.voiceStyle;
-    _knowledgeFocusController.text = agent.knowledgeFocus;
+    _introMessageController.text = agent.introMessage;
+    _selectedFaceId = agent.faceId;
+    _faceType = animalFaces.contains(agent.faceId) ? 'animal' : 'robot';
+    _selectedVoice = agent.voice.isNotEmpty ? agent.voice : 'nova';
+    _voiceMode = agent.voiceMode;
     setState(() => _editingIndex = index);
   }
   
@@ -2813,25 +1733,25 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
       TopNotification.show(context, message: 'Agent name is required', backgroundColor: AppColors.danger);
       return;
     }
-    
+
     // Preserve isDefault from existing agent if editing
     final existingIsDefault = _editingIndex != null && _editingIndex! >= 0 && _editingIndex! < _agents.length
         ? _agents[_editingIndex!].isDefault
         : false;
-    
+
     final agent = AgentDefinition(
       name: name,
-      description: _descriptionController.text.trim(),
-      systemInstructions: _systemInstructionsController.text.trim(),
+      faceId: _faceType == 'animal' ? _selectedFaceId : '',
+      voice: _selectedVoice,
+      voiceMode: _voiceMode,
       personality: _personalityController.text.trim(),
-      voiceStyle: _voiceStyleController.text.trim(),
-      knowledgeFocus: _knowledgeFocusController.text.trim(),
+      introMessage: _introMessageController.text.trim(),
       isDefault: existingIsDefault,
     );
-    
+
     widget.rosBridge.publishSaveAgent(agent);
     setState(() => _editingIndex = null);
-    
+
     TopNotification.show(context, message: 'Agent "$name" saved', backgroundColor: AppColors.success);
   }
   
@@ -2866,7 +1786,7 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
               const Icon(Icons.psychology, color: AppColors.accent, size: 24),
               const SizedBox(width: AppSpacing.sm),
               const Text(
-                'AI Agents',
+                'Agents',
                 style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 20,
@@ -2928,7 +1848,7 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     const Text(
-                      'No AI Agents configured',
+                      'No agents configured',
                       style: TextStyle(
                         color: AppColors.textMuted,
                         fontSize: 16,
@@ -2964,7 +1884,7 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
   Widget _buildAgentCard(int index, AgentDefinition agent) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -2975,19 +1895,29 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.accent.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(AppRadius.small),
-            ),
-            child: const Icon(Icons.psychology, color: AppColors.accent, size: 28),
-          ),
-          const SizedBox(width: AppSpacing.md),
+          // Face preview
+          animalFaces.contains(agent.faceId)
+              ? Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    child: Image.asset(
+                      'assets/faces/${agent.faceId}.png',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _buildRobotFacePreview(80),
+                    ),
+                  ),
+                )
+              : _buildRobotFacePreview(80),
+          const SizedBox(width: AppSpacing.lg),
+          // Agent Info
           Expanded(
-            flex: 1,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2995,26 +1925,29 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
                   agent.name,
                   style: const TextStyle(
                     color: AppColors.textPrimary,
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                if (agent.description.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    agent.description,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Voice: ${agent.voice.isNotEmpty ? agent.voice[0].toUpperCase() + agent.voice.substring(1) : "Nova"}',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
                   ),
-                ],
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Mode: ${agent.voiceMode == "realtime" ? "Realtime" : "Turn-taking"}',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
               ],
             ),
           ),
-          const Spacer(),
           // Default status badge or Set Default button
           agent.isDefault
               ? Container(
@@ -3027,7 +1960,7 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
                     borderRadius: BorderRadius.circular(AppRadius.small),
                   ),
                   child: const Text(
-                    'Default',
+                    'Active',
                     style: TextStyle(
                       color: AppColors.success,
                       fontWeight: FontWeight.bold,
@@ -3048,7 +1981,7 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
                       border: Border.all(color: AppColors.dangerBright),
                     ),
                     child: const Text(
-                      'Set Default',
+                      'Activate',
                       style: TextStyle(
                         color: AppColors.dangerBright,
                         fontWeight: FontWeight.bold,
@@ -3146,55 +2079,196 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Face preview (large, centered) - AT THE TOP
+                Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.medium),
+                      border: Border.all(color: AppColors.border, width: 2),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.medium - 1),
+                      child: _faceType == 'animal' && _selectedFaceId.isNotEmpty
+                          ? Image.asset(
+                              'assets/faces/$_selectedFaceId.png',
+                              width: 120,
+                              height: 120,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _buildRobotFacePreview(120),
+                            )
+                          : _buildRobotFacePreview(120),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+
+                // Face Type toggle
+                const Text(
+                  'Face Type',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() {
+                          _faceType = 'robot';
+                          _selectedFaceId = '';
+                        }),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                          decoration: BoxDecoration(
+                            color: _faceType == 'robot' ? AppColors.accent : AppColors.background,
+                            borderRadius: BorderRadius.circular(AppRadius.small),
+                            border: Border.all(
+                              color: _faceType == 'robot' ? AppColors.accent : AppColors.border,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Robot',
+                              style: TextStyle(
+                                color: _faceType == 'robot' ? Colors.white : AppColors.textSecondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() {
+                          _faceType = 'animal';
+                          if (_selectedFaceId.isEmpty) _selectedFaceId = 'cat';
+                        }),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                          decoration: BoxDecoration(
+                            color: _faceType == 'animal' ? AppColors.accent : AppColors.background,
+                            borderRadius: BorderRadius.circular(AppRadius.small),
+                            border: Border.all(
+                              color: _faceType == 'animal' ? AppColors.accent : AppColors.border,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Animal',
+                              style: TextStyle(
+                                color: _faceType == 'animal' ? Colors.white : AppColors.textSecondary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Animal faces grid (only shown when Animal is selected)
+                if (_faceType == 'animal') ...[
+                  const SizedBox(height: AppSpacing.md),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 6,
+                      crossAxisSpacing: AppSpacing.sm,
+                      mainAxisSpacing: AppSpacing.sm,
+                    ),
+                    itemCount: animalFaces.length,
+                    itemBuilder: (context, index) {
+                      final faceId = animalFaces[index];
+                      final isSelected = _selectedFaceId == faceId;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedFaceId = faceId),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(AppRadius.small),
+                            border: Border.all(
+                              color: isSelected ? AppColors.accent : AppColors.border,
+                              width: isSelected ? 2 : 1,
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadius.small - 1),
+                            child: Image.asset(
+                              'assets/faces/$faceId.png',
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Center(
+                                child: Text(faceId[0].toUpperCase(), style: const TextStyle(color: AppColors.textMuted)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+
+                const SizedBox(height: AppSpacing.xl),
+
+                // Agent Name
                 _buildTextField(
                   controller: _nameController,
                   label: 'Agent Name',
-                  hint: 'e.g., Greeter, Bartender, Tour Guide',
+                  hint: 'e.g., Millie, Greeter, Tour Guide',
                   textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _descriptionController,
-                  label: 'Description',
-                  hint: 'Brief description of what this agent does',
-                  maxLines: 2,
-                  textCapitalization: TextCapitalization.sentences,
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 _buildTextField(
                   controller: _personalityController,
-                  label: 'Additional Personality & Tone',
-                  hint: 'Added on top of base personality from Profile',
+                  label: 'Personality',
+                  hint: 'Describe how this agent should behave and speak',
+                  maxLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                _buildTextField(
+                  controller: _introMessageController,
+                  label: 'Intro Message',
+                  hint: 'What the agent says when starting a conversation',
                   maxLines: 2,
                   textCapitalization: TextCapitalization.sentences,
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _systemInstructionsController,
-                  label: 'Additional System Instructions',
-                  hint: 'Added on top of base instructions from Profile',
-                  maxLines: null,
-                  minLines: 4,
-                  textCapitalization: TextCapitalization.sentences,
+
+                // Voice dropdown
+                _buildDropdownField(
+                  label: 'Voice',
+                  value: _selectedVoice,
+                  items: voiceOptions,
+                  onChanged: (value) => setState(() => _selectedVoice = value ?? 'nova'),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _knowledgeFocusController,
-                  label: 'Knowledge Focus',
-                  hint: 'What topics should this agent know about?',
-                  maxLines: 2,
-                  textCapitalization: TextCapitalization.sentences,
+
+                // Voice Mode dropdown
+                _buildDropdownField(
+                  label: 'Voice Mode',
+                  value: _voiceMode,
+                  items: const ['turn_taking', 'realtime'],
+                  itemLabels: const {'turn_taking': 'Turn Taking', 'realtime': 'Realtime'},
+                  onChanged: (value) {
+                    setState(() {
+                      _voiceMode = value ?? 'turn_taking';
+                      // Switch to valid voice if current isn't available in new mode
+                      final newVoices = _voiceMode == 'realtime' ? realtimeVoices : turnTakingVoices;
+                      if (!newVoices.contains(_selectedVoice)) {
+                        _selectedVoice = 'alloy';
+                      }
+                    });
+                  },
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _voiceStyleController,
-                  label: 'Voice Style (Optional)',
-                  hint: 'e.g., Upbeat, Calm, Energetic',
-                  textCapitalization: TextCapitalization.words,
-                ),
-                
+
                 const SizedBox(height: AppSpacing.xl),
-                
+
                 // Save button
                 GestureDetector(
                   onTap: _saveAgent,
@@ -3300,6 +2374,790 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required String value,
+    required List<String> items,
+    required void Function(String?) onChanged,
+    Map<String, String>? itemLabels,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(AppRadius.small),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isExpanded: true,
+              dropdownColor: AppColors.background,
+              style: const TextStyle(color: AppColors.textPrimary),
+              items: items.map((item) => DropdownMenuItem(
+                value: item,
+                child: Text(itemLabels?[item] ?? item),
+              )).toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build robot face preview (like millie_mini)
+  Widget _buildRobotFacePreview(double size) {
+    final eyeWidth = size * 0.24;
+    final eyeHeight = size * 0.32;
+    final eyeGap = size * 0.08;
+    final mouthWidth = size * 0.32;
+    final mouthHeight = size * 0.04;
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(size * 0.08),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Eyes - rounded corner rectangles
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: eyeWidth,
+                height: eyeHeight,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(eyeWidth * 0.1),
+                ),
+              ),
+              SizedBox(width: eyeGap),
+              Container(
+                width: eyeWidth,
+                height: eyeHeight,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(eyeWidth * 0.1),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: size * 0.12),
+          // Mouth
+          Container(
+            width: mouthWidth,
+            height: mouthHeight,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(mouthHeight / 2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Memory section - view and edit robot memory
+class _MemorySection extends StatefulWidget {
+  final RosBridge rosBridge;
+
+  const _MemorySection({required this.rosBridge});
+
+  @override
+  State<_MemorySection> createState() => _MemorySectionState();
+}
+
+class _MemorySectionState extends State<_MemorySection> {
+  MemoryData _memories = MemoryData();
+  bool _isEditing = false;
+  String _editingType = ''; // 'owner_note', 'person', 'note'
+  int? _editingIndex;
+
+  // Person editing controllers
+  final _personNameController = TextEditingController();
+  final _personRelationshipController = TextEditingController();
+  final _personInterestsController = TextEditingController();
+  final _personNotesController = TextEditingController();
+
+  // Note editing controller
+  final _noteContentController = TextEditingController();
+  String _noteCategory = 'general';
+
+  late final void Function(MemoryData) _memoryListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupMemoryListener();
+    widget.rosBridge.requestMemories();
+  }
+
+  void _setupMemoryListener() {
+    _memoryListener = (memories) {
+      if (mounted) {
+        setState(() => _memories = memories);
+      }
+    };
+    widget.rosBridge.addMemoryListener(_memoryListener);
+  }
+
+  @override
+  void dispose() {
+    widget.rosBridge.removeMemoryListener(_memoryListener);
+    _personNameController.dispose();
+    _personRelationshipController.dispose();
+    _personInterestsController.dispose();
+    _personNotesController.dispose();
+    _noteContentController.dispose();
+    super.dispose();
+  }
+
+  void _addPerson() {
+    _personNameController.clear();
+    _personRelationshipController.clear();
+    _personInterestsController.clear();
+    _personNotesController.clear();
+    setState(() {
+      _isEditing = true;
+      _editingType = 'person';
+      _editingIndex = null;
+    });
+  }
+
+  void _editPerson(int index) {
+    final person = _memories.people[index];
+    _personNameController.text = person.name;
+    _personRelationshipController.text = person.relationship;
+    _personInterestsController.text = person.interests ?? '';
+    _personNotesController.text = person.notes.join(', ');
+    setState(() {
+      _isEditing = true;
+      _editingType = 'person';
+      _editingIndex = index;
+    });
+  }
+
+  void _savePerson() {
+    final name = _personNameController.text.trim();
+    if (name.isEmpty) {
+      TopNotification.show(context, message: 'Name is required', backgroundColor: AppColors.danger);
+      return;
+    }
+
+    final notes = _personNotesController.text
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+
+    final person = KnownPerson(
+      name: name,
+      relationship: _personRelationshipController.text.trim(),
+      interests: _personInterestsController.text.trim().isEmpty ? null : _personInterestsController.text.trim(),
+      notes: notes,
+      lastSeen: DateTime.now(),
+    );
+
+    List<KnownPerson> updatedPeople;
+    if (_editingIndex != null) {
+      updatedPeople = List.from(_memories.people);
+      updatedPeople[_editingIndex!] = person;
+    } else {
+      updatedPeople = [..._memories.people, person];
+    }
+
+    final updatedMemories = _memories.copyWith(people: updatedPeople);
+    widget.rosBridge.publishSaveMemories(updatedMemories);
+
+    setState(() {
+      _isEditing = false;
+      _editingType = '';
+      _editingIndex = null;
+    });
+
+    TopNotification.show(context, message: 'Person saved', backgroundColor: AppColors.success);
+  }
+
+  void _deletePerson(int index) {
+    final updatedPeople = List<KnownPerson>.from(_memories.people);
+    final name = updatedPeople[index].name;
+    updatedPeople.removeAt(index);
+
+    final updatedMemories = _memories.copyWith(people: updatedPeople);
+    widget.rosBridge.publishSaveMemories(updatedMemories);
+
+    TopNotification.show(context, message: '$name removed', backgroundColor: AppColors.warning);
+  }
+
+  void _addNote() {
+    _noteContentController.clear();
+    _noteCategory = 'general';
+    setState(() {
+      _isEditing = true;
+      _editingType = 'note';
+      _editingIndex = null;
+    });
+  }
+
+  void _saveNote() {
+    final content = _noteContentController.text.trim();
+    if (content.isEmpty) {
+      TopNotification.show(context, message: 'Note content is required', backgroundColor: AppColors.danger);
+      return;
+    }
+
+    final note = MemoryNote(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      content: content,
+      category: _noteCategory,
+    );
+
+    final updatedNotes = [..._memories.notes, note];
+    final updatedMemories = _memories.copyWith(notes: updatedNotes);
+    widget.rosBridge.publishSaveMemories(updatedMemories);
+
+    setState(() {
+      _isEditing = false;
+      _editingType = '';
+    });
+
+    TopNotification.show(context, message: 'Note added', backgroundColor: AppColors.success);
+  }
+
+  void _deleteNote(int index) {
+    final updatedNotes = List<MemoryNote>.from(_memories.notes);
+    updatedNotes.removeAt(index);
+
+    final updatedMemories = _memories.copyWith(notes: updatedNotes);
+    widget.rosBridge.publishSaveMemories(updatedMemories);
+
+    TopNotification.show(context, message: 'Note deleted', backgroundColor: AppColors.warning);
+  }
+
+  void _addOwnerNote() {
+    _noteContentController.clear();
+    setState(() {
+      _isEditing = true;
+      _editingType = 'owner_note';
+    });
+  }
+
+  void _saveOwnerNote() {
+    final content = _noteContentController.text.trim();
+    if (content.isEmpty) return;
+
+    final updatedNotes = [..._memories.owner.notes, content];
+    final updatedOwner = _memories.owner.copyWith(notes: updatedNotes);
+    final updatedMemories = _memories.copyWith(owner: updatedOwner);
+    widget.rosBridge.publishSaveMemories(updatedMemories);
+
+    _noteContentController.clear();
+    setState(() {
+      _isEditing = false;
+      _editingType = '';
+    });
+  }
+
+  void _deleteOwnerNote(int index) {
+    final updatedNotes = List<String>.from(_memories.owner.notes);
+    updatedNotes.removeAt(index);
+    final updatedOwner = _memories.owner.copyWith(notes: updatedNotes);
+    final updatedMemories = _memories.copyWith(owner: updatedOwner);
+    widget.rosBridge.publishSaveMemories(updatedMemories);
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _isEditing = false;
+      _editingType = '';
+      _editingIndex = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isEditing) {
+      return _buildEditView();
+    }
+    return _buildListView();
+  }
+
+  Widget _buildListView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          const Row(
+            children: [
+              Icon(Icons.memory, color: AppColors.accent, size: 24),
+              SizedBox(width: AppSpacing.sm),
+              Text(
+                'Robot Memory',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          const Text(
+            'What the robot knows and remembers. The AI can update this during conversations.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+          ),
+
+          const SizedBox(height: AppSpacing.xl),
+
+          // Owner Notes Section
+          _buildSectionHeader('Owner Notes', Icons.person, onAdd: _addOwnerNote),
+          const SizedBox(height: AppSpacing.md),
+          if (_memories.owner.notes.isEmpty)
+            _buildEmptyState('No owner notes yet', 'Things the robot learns about you')
+          else
+            ..._memories.owner.notes.asMap().entries.map((e) => _buildOwnerNoteCard(e.key, e.value)),
+
+          const SizedBox(height: AppSpacing.xl),
+
+          // People Section
+          _buildSectionHeader('People', Icons.people, onAdd: _addPerson),
+          const SizedBox(height: AppSpacing.md),
+          if (_memories.people.isEmpty)
+            _buildEmptyState('No people remembered yet', 'The robot will learn names as it meets people')
+          else
+            ..._memories.people.asMap().entries.map((e) => _buildPersonCard(e.key, e.value)),
+
+          const SizedBox(height: AppSpacing.xl),
+
+          // Notes Section
+          _buildSectionHeader('Notes', Icons.note, onAdd: _addNote),
+          const SizedBox(height: AppSpacing.md),
+          if (_memories.notes.isEmpty)
+            _buildEmptyState('No notes yet', 'The robot will save observations and facts here')
+          else
+            ..._memories.notes.asMap().entries.map((e) => _buildNoteCard(e.key, e.value)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon, {VoidCallback? onAdd, String addLabel = 'Add'}) {
+    return Row(
+      children: [
+        Icon(icon, color: AppColors.textSecondary, size: 18),
+        const SizedBox(width: AppSpacing.sm),
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const Spacer(),
+        if (onAdd != null)
+          GestureDetector(
+            onTap: onAdd,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                border: Border.all(color: AppColors.accent),
+              ),
+              child: Text(
+                addLabel,
+                style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(String title, String subtitle) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Text(title, style: const TextStyle(color: AppColors.textMuted)),
+          const SizedBox(height: AppSpacing.xs),
+          Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOwnerNoteCard(int index, String content) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.small),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              content,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _deleteOwnerNote(index),
+            child: const Icon(Icons.close, color: AppColors.textMuted, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPersonCard(int index, KnownPerson person) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      person.name,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (person.relationship.isNotEmpty) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(AppRadius.small),
+                        ),
+                        child: Text(
+                          person.relationship,
+                          style: const TextStyle(color: AppColors.accent, fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (person.notes.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    person.notes.join('; '),
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _editPerson(index),
+            child: const Padding(
+              padding: EdgeInsets.all(AppSpacing.sm),
+              child: Icon(Icons.edit, color: AppColors.textMuted, size: 18),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _deletePerson(index),
+            child: const Padding(
+              padding: EdgeInsets.all(AppSpacing.sm),
+              child: Icon(Icons.delete, color: AppColors.danger, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoteCard(int index, MemoryNote note) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  note.content,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '${note.category} • ${_formatDate(note.createdAt)}',
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _deleteNote(index),
+            child: const Padding(
+              padding: EdgeInsets.all(AppSpacing.sm),
+              child: Icon(Icons.delete, color: AppColors.danger, size: 18),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inDays == 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    return '${date.month}/${date.day}/${date.year}';
+  }
+
+  Widget _buildEditView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with back button
+          Row(
+            children: [
+              GestureDetector(
+                onTap: _cancelEdit,
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: const Icon(Icons.arrow_back, color: AppColors.textPrimary, size: 20),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Text(
+                _editingType == 'person'
+                    ? (_editingIndex == null ? 'Add Person' : 'Edit Person')
+                    : _editingType == 'note'
+                        ? 'Add Note'
+                        : 'Add Owner Note',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: AppSpacing.xl),
+
+          // Form based on editing type
+          if (_editingType == 'person') _buildPersonForm(),
+          if (_editingType == 'note') _buildNoteForm(),
+          if (_editingType == 'owner_note') _buildOwnerNoteForm(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPersonForm() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFormField('Name', _personNameController, 'Person\'s name'),
+          const SizedBox(height: AppSpacing.md),
+          _buildFormField('Relationship', _personRelationshipController, 'e.g., friend, coworker'),
+          const SizedBox(height: AppSpacing.md),
+          _buildFormField('Interests', _personInterestsController, 'Their interests'),
+          const SizedBox(height: AppSpacing.md),
+          _buildFormField('Notes', _personNotesController, 'Comma-separated notes'),
+          const SizedBox(height: AppSpacing.xl),
+          _buildSaveButton(_savePerson),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoteForm() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFormField('Note', _noteContentController, 'What should the robot remember?', maxLines: 3),
+          const SizedBox(height: AppSpacing.md),
+          const Text('Category', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.sm,
+            children: ['general', 'observation', 'preference', 'fact', 'event'].map((cat) {
+              final isSelected = _noteCategory == cat;
+              return GestureDetector(
+                onTap: () => setState(() => _noteCategory = cat),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppColors.accent.withOpacity(0.15) : AppColors.background,
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    border: Border.all(color: isSelected ? AppColors.accent : AppColors.border),
+                  ),
+                  child: Text(
+                    cat,
+                    style: TextStyle(
+                      color: isSelected ? AppColors.accent : AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          _buildSaveButton(_saveNote),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOwnerNoteForm() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFormField('Note about owner', _noteContentController, 'Something the robot should know about you'),
+          const SizedBox(height: AppSpacing.xl),
+          _buildSaveButton(_saveOwnerNote),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormField(String label, TextEditingController controller, String hint, {int maxLines = 1}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        const SizedBox(height: AppSpacing.xs),
+        TextField(
+          controller: controller,
+          maxLines: maxLines,
+          style: const TextStyle(color: AppColors.textPrimary),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(color: AppColors.textMuted),
+            filled: true,
+            fillColor: AppColors.background,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              borderSide: const BorderSide(color: AppColors.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              borderSide: const BorderSide(color: AppColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              borderSide: const BorderSide(color: AppColors.accent),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSaveButton(VoidCallback onSave) {
+    return GestureDetector(
+      onTap: onSave,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.accent.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(AppRadius.small),
+          border: Border.all(color: AppColors.accent),
+        ),
+        child: const Center(
+          child: Text(
+            'Save',
+            style: TextStyle(
+              color: AppColors.accent,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -3657,35 +3515,92 @@ class _WaypointRow extends StatelessWidget {
 }
 
 class _QuickButtonPreview extends StatelessWidget {
-  final int index;
+  final ButtonConfig config;
   final VoidCallback onEdit;
 
-  const _QuickButtonPreview({required this.index, required this.onEdit});
+  const _QuickButtonPreview({required this.config, required this.onEdit});
+
+  IconData _getIcon() {
+    switch (config.actionType) {
+      case 'waypoint':
+        return Icons.location_on;
+      case 'task':
+        return Icons.playlist_play;
+      case 'none':
+      default:
+        return Icons.add;
+    }
+  }
+
+  String _getLabel() {
+    switch (config.actionType) {
+      case 'waypoint':
+        return config.value ?? '';
+      case 'task':
+        return config.value ?? '';
+      case 'none':
+      default:
+        return '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isConfigured = config.actionType != 'none';
+    final label = _getLabel();
+
     return GestureDetector(
       onTap: onEdit,
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.background,
           borderRadius: BorderRadius.circular(AppRadius.medium),
           border: Border.all(color: AppColors.border),
         ),
         child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${index + 1}',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 18),
-              ),
-              const Text(
-                'Tap to edit',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 9),
-              ),
-            ],
-          ),
+          child: isConfigured
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _getIcon(),
+                      color: AppColors.textSecondary,
+                      size: 24,
+                    ),
+                    if (label.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          label,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ],
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add,
+                      color: AppColors.textMuted.withOpacity(0.5),
+                      size: 24,
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Tap to edit',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 9),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -3695,16 +3610,69 @@ class _QuickButtonPreview extends StatelessWidget {
 /// Edit button dialog
 class _EditButtonDialog extends StatefulWidget {
   final int buttonIndex;
-  
-  const _EditButtonDialog({required this.buttonIndex});
+  final RosBridge rosBridge;
+
+  const _EditButtonDialog({required this.buttonIndex, required this.rosBridge});
 
   @override
   State<_EditButtonDialog> createState() => _EditButtonDialogState();
 }
 
 class _EditButtonDialogState extends State<_EditButtonDialog> {
-  String _actionType = 'waypoint';
-  String? _selectedWaypoint;
+  String _actionType = 'none';
+  String? _selectedValue;
+  List<Waypoint> _waypoints = [];
+  List<SavedSequence> _sequences = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Load waypoints and sequences from rosBridge
+    _waypoints = widget.rosBridge.waypoints;
+    _sequences = widget.rosBridge.sequences;
+
+    // Listen for updates
+    widget.rosBridge.addWaypointListener(_onWaypointsUpdate);
+    widget.rosBridge.addSequenceListener(_onSequencesUpdate);
+
+    // Load saved config for this button
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    final config = await ButtonConfigService.getConfig(widget.buttonIndex);
+    if (mounted) {
+      setState(() {
+        _actionType = config.actionType;
+        _selectedValue = config.value;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _saveConfig() async {
+    final config = ButtonConfig(
+      actionType: _actionType,
+      value: _selectedValue,
+    );
+    await ButtonConfigService.saveConfig(widget.buttonIndex, config);
+  }
+
+  @override
+  void dispose() {
+    widget.rosBridge.removeWaypointListener(_onWaypointsUpdate);
+    widget.rosBridge.removeSequenceListener(_onSequencesUpdate);
+    super.dispose();
+  }
+
+  void _onWaypointsUpdate(List<Waypoint> waypoints) {
+    if (mounted) setState(() => _waypoints = waypoints);
+  }
+
+  void _onSequencesUpdate(List<SavedSequence> sequences) {
+    if (mounted) setState(() => _sequences = sequences);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3719,60 +3687,78 @@ class _EditButtonDialogState extends State<_EditButtonDialog> {
       ),
       content: SizedBox(
         width: 300,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Action Type:', style: TextStyle(color: AppColors.textSecondary)),
-            const SizedBox(height: AppSpacing.sm),
-            
-            // Action type selector
-            Wrap(
-              spacing: AppSpacing.sm,
-              children: [
-                _ActionChip(
-                  label: 'Waypoint',
-                  isSelected: _actionType == 'waypoint',
-                  onSelected: () => setState(() => _actionType = 'waypoint'),
-                ),
-                _ActionChip(
-                  label: 'Workflow',
-                  isSelected: _actionType == 'workflow',
-                  onSelected: () => setState(() => _actionType = 'workflow'),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: AppSpacing.lg),
-            
-            if (_actionType == 'waypoint') ...[
-              const Text('Select Waypoint:', style: TextStyle(color: AppColors.textSecondary)),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Action Type:', style: TextStyle(color: AppColors.textSecondary)),
               const SizedBox(height: AppSpacing.sm),
-              // Demo waypoint list
-              _WaypointOption(
-                name: 'Home',
-                isSelected: _selectedWaypoint == 'Home',
-                onSelected: () => setState(() => _selectedWaypoint = 'Home'),
+
+              // Action type selector
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  _ActionChip(
+                    label: 'None',
+                    isSelected: _actionType == 'none',
+                    onSelected: () => setState(() {
+                      _actionType = 'none';
+                      _selectedValue = null;
+                    }),
+                  ),
+                  _ActionChip(
+                    label: 'Waypoint',
+                    isSelected: _actionType == 'waypoint',
+                    onSelected: () => setState(() {
+                      _actionType = 'waypoint';
+                      _selectedValue = null;
+                    }),
+                  ),
+                  _ActionChip(
+                    label: 'Task',
+                    isSelected: _actionType == 'task',
+                    onSelected: () => setState(() {
+                      _actionType = 'task';
+                      _selectedValue = null;
+                    }),
+                  ),
+                ],
               ),
-              _WaypointOption(
-                name: 'Kitchen',
-                isSelected: _selectedWaypoint == 'Kitchen',
-                onSelected: () => setState(() => _selectedWaypoint = 'Kitchen'),
-              ),
-              _WaypointOption(
-                name: 'Office',
-                isSelected: _selectedWaypoint == 'Office',
-                onSelected: () => setState(() => _selectedWaypoint = 'Office'),
-              ),
+
+              const SizedBox(height: AppSpacing.lg),
+
+              // Waypoint selection
+              if (_actionType == 'waypoint') ...[
+                const Text('Select Waypoint:', style: TextStyle(color: AppColors.textSecondary)),
+                const SizedBox(height: AppSpacing.sm),
+                if (_waypoints.isEmpty)
+                  const Text('No waypoints saved yet.', style: TextStyle(color: AppColors.textMuted, fontSize: 12))
+                else
+                  ..._waypoints.map((wp) => _WaypointOption(
+                    name: wp.name,
+                    isSelected: _selectedValue == wp.name,
+                    onSelected: () => setState(() => _selectedValue = wp.name),
+                  )),
+              ],
+
+              // Task/Sequence selection
+              if (_actionType == 'task') ...[
+                const Text('Select Task:', style: TextStyle(color: AppColors.textSecondary)),
+                const SizedBox(height: AppSpacing.sm),
+                if (_sequences.isEmpty)
+                  const Text('No tasks saved yet.', style: TextStyle(color: AppColors.textMuted, fontSize: 12))
+                else
+                  ..._sequences.map((seq) => _WaypointOption(
+                    name: seq.name,
+                    isSelected: _selectedValue == seq.name,
+                    onSelected: () => setState(() => _selectedValue = seq.name),
+                  )),
+              ],
+
             ],
-            
-            if (_actionType == 'workflow') ...[
-              const Text(
-                'Create multi-step workflows in the Workflows section.',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
       actions: [
@@ -3782,9 +3768,10 @@ class _EditButtonDialogState extends State<_EditButtonDialog> {
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-          onPressed: () {
-            debugPrint("Saved button ${widget.buttonIndex + 1}: $_actionType -> $_selectedWaypoint");
-            Navigator.pop(context);
+          onPressed: () async {
+            await _saveConfig();
+            debugPrint("Saved button ${widget.buttonIndex + 1}: $_actionType -> $_selectedValue");
+            if (context.mounted) Navigator.pop(context);
           },
           child: const Text('Save', style: TextStyle(color: Colors.white)),
         ),

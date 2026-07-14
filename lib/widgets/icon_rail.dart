@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 
 /// The selected view in the main content area
-enum MainView { camera, map, locations, tickets, chat, settings }
+enum MainView { camera, map, locations, chat, settings }
 
 /// Left icon rail with navigation views
 class IconRail extends StatelessWidget {
@@ -42,9 +42,9 @@ class IconRail extends StatelessWidget {
           
           // E-STOP button (top, always visible, prominent)
           _EstopButton(onPressed: onEstop),
-          
+
           const SizedBox(height: AppSpacing.lg),
-          
+
           // Camera view
           _RailButton(
             icon: Icons.videocam,
@@ -72,19 +72,9 @@ class IconRail extends StatelessWidget {
             isActive: selectedView == MainView.locations,
             onPressed: () => onViewChanged(MainView.locations),
           ),
-          
+
           const SizedBox(height: AppSpacing.sm),
-          
-          // Tickets view
-          _RailButton(
-            icon: Icons.receipt_long,
-            label: 'Tickets',
-            isActive: selectedView == MainView.tickets,
-            onPressed: () => onViewChanged(MainView.tickets),
-          ),
-          
-          const SizedBox(height: AppSpacing.sm),
-          
+
           // Chat view
           _RailButton(
             icon: Icons.chat_bubble_outline,
@@ -239,7 +229,7 @@ class _ConnectionIndicator extends StatelessWidget {
 /// E-STOP button - large, red, always accessible
 class _EstopButton extends StatelessWidget {
   final VoidCallback onPressed;
-  
+
   const _EstopButton({required this.onPressed});
 
   @override

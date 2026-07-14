@@ -5,7 +5,7 @@
 
 class RobotConfig {
   /// Your robot's IP address on the local network
-  static const String robotIP = '192.168.1.14';
+  static const String robotIP = '192.168.0.157';
   
   /// ROSBridge WebSocket port (default: 9090)
   static const int rosbridgePort = 9090;
@@ -24,7 +24,7 @@ class RobotConfig {
   
   /// Video stream URL (web_video_server)
   static String videoStreamUrl({
-    String topic = '/oak/rgb/image_rect',
+    String topic = '/oak/rgb/image_raw',
     int width = 320,
     int height = 240,
     int quality = 30,

@@ -1,7 +1,6 @@
 import '../utils/rosbridge.dart';
-import '../models/ticket.dart';
 
-/// Service to track robot's current location for ticket creation
+/// Service to track robot's current location
 /// Tracks last arrived waypoint and current pose
 class LocationService {
   static final LocationService instance = LocationService._();
@@ -63,14 +62,14 @@ class LocationService {
     _isNavigating = true;
   }
 
-  /// Get current location name for ticket
+  /// Get current location name
   /// Returns waypoint name if at a waypoint, or null if unknown
   String? get currentLocationName {
     // If at a known waypoint, return its name
     if (_lastWaypointName != null) {
       return _lastWaypointName;
     }
-    
+
     // Try to find nearest waypoint by proximity
     if (_currentPose != null && _waypoints.isNotEmpty) {
       final nearest = _findNearestWaypoint(_currentPose!);
@@ -78,21 +77,12 @@ class LocationService {
         return nearest.name;
       }
     }
-    
+
     return null;
   }
 
-  /// Get current return pose for delivery
-  ReturnPose? get currentReturnPose {
-    if (_currentPose != null) {
-      return ReturnPose(
-        x: _currentPose!.x,
-        y: _currentPose!.y,
-        theta: _currentPose!.theta,
-      );
-    }
-    return null;
-  }
+  /// Get current robot pose
+  RobotPose? get currentPose => _currentPose;
 
   /// Check if robot is currently navigating
   bool get isNavigating => _isNavigating;

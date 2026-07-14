@@ -7,13 +7,11 @@ import '../widgets/top_notification.dart';
 class ActionEditorPage extends StatefulWidget {
   final ActionDefinition? existingAction;  // null = creating new
   final Function(ActionDefinition) onSave;
-  final RosBridge rosBridge;  // For fetching agents
-  
+
   const ActionEditorPage({
     super.key,
     this.existingAction,
     required this.onSave,
-    required this.rosBridge,
   });
 
   @override
@@ -23,71 +21,29 @@ class ActionEditorPage extends StatefulWidget {
 class _ActionEditorPageState extends State<ActionEditorPage> {
   late TextEditingController _nameController;
   late TextEditingController _descriptionController;
-  late TextEditingController _contextController;
-  late TextEditingController _systemInstructionsController;
   late TextEditingController _openingGreetingController;
   late TextEditingController _confirmationController;
-  
+
   late List<ConversationStep> _steps;
-  
-  List<AgentDefinition> _agents = [];
-  String? _selectedAgentName;
-  String? _pendingAgentName;  // Store original until agents load
-  
-  // Multi-listener callback (for cleanup)
-  late final void Function(List<AgentDefinition>) _agentListener;
-  
+
   bool get _isEditing => widget.existingAction != null;
 
   @override
   void initState() {
     super.initState();
     final action = widget.existingAction;
-    
+
     _nameController = TextEditingController(text: action?.name ?? '');
     _descriptionController = TextEditingController(text: action?.description ?? '');
-    _contextController = TextEditingController(text: action?.context ?? '');
-    _systemInstructionsController = TextEditingController(text: action?.systemInstructions ?? '');
     _openingGreetingController = TextEditingController(text: action?.openingGreeting ?? '');
     _confirmationController = TextEditingController(text: action?.confirmation ?? '');
     _steps = List.from(action?.steps ?? []);
-    
-    // Store the agent name - will be validated when agents load
-    _pendingAgentName = action?.agentName.isNotEmpty == true ? action!.agentName : null;
-    _selectedAgentName = null;  // Will be set when agents load
-    
-    _setupAgentsCallback();
-    _requestAgents();
-  }
-  
-  void _setupAgentsCallback() {
-    // Multi-listener pattern
-    _agentListener = (agents) {
-      if (mounted) {
-        setState(() {
-          _agents = agents;
-          // Restore pending agent selection if it exists in the loaded list
-          if (_pendingAgentName != null && agents.any((a) => a.name == _pendingAgentName)) {
-            _selectedAgentName = _pendingAgentName;
-            _pendingAgentName = null;
-          }
-        });
-      }
-    };
-    widget.rosBridge.addAgentListener(_agentListener);
-  }
-  
-  void _requestAgents() {
-    widget.rosBridge.requestAgents();
   }
 
   @override
   void dispose() {
-    widget.rosBridge.removeAgentListener(_agentListener);  // Multi-listener cleanup
     _nameController.dispose();
     _descriptionController.dispose();
-    _contextController.dispose();
-    _systemInstructionsController.dispose();
     _openingGreetingController.dispose();
     _confirmationController.dispose();
     super.dispose();
@@ -129,25 +85,19 @@ class _ActionEditorPageState extends State<ActionEditorPage> {
       TopNotification.show(context, message: 'Please enter an Action Title', backgroundColor: AppColors.danger);
       return;
     }
-    
-    // Use selected agent or pending (if agents haven't loaded yet)
-    final agentName = _selectedAgentName ?? _pendingAgentName ?? '';
-    
+
     // Preserve isDefault from existing action when editing
     final isDefault = widget.existingAction?.isDefault ?? false;
-    
+
     final action = ActionDefinition(
       name: name,
       description: _descriptionController.text.trim(),
-      agentName: agentName,
-      context: _contextController.text.trim(),
-      systemInstructions: _systemInstructionsController.text.trim(),
       openingGreeting: _openingGreetingController.text.trim(),
       steps: _steps,
       confirmation: _confirmationController.text.trim(),
       isDefault: isDefault,
     );
-    
+
     widget.onSave(action);
     Navigator.pop(context);
   }
@@ -223,37 +173,9 @@ class _ActionEditorPageState extends State<ActionEditorPage> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: AppSpacing.xl),
-            
-            // AI Agent & Context
-            _buildSection(
-              title: 'AI Context',
-              icon: Icons.psychology,
-              children: [
-                // Agent dropdown
-                _buildAgentDropdown(),
-                const SizedBox(height: AppSpacing.md),
-                _buildTextField(
-                  controller: _contextController,
-                  label: 'Additional Context',
-                  hint: 'Extra context specific to this action (optional)',
-                  maxLines: 3,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _buildTextField(
-                  controller: _systemInstructionsController,
-                  label: 'Additional Instructions',
-                  hint: 'Extra behavior rules for this action (optional)',
-                  maxLines: 2,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: AppSpacing.xl),
-            
+
             // Opening Greeting
             _buildSection(
               title: 'Opening Greeting',
@@ -268,9 +190,9 @@ class _ActionEditorPageState extends State<ActionEditorPage> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: AppSpacing.xl),
-            
+
             // Conversation Steps
             _buildSection(
               title: 'Conversation Flow',
@@ -315,9 +237,9 @@ class _ActionEditorPageState extends State<ActionEditorPage> {
                   ),
               ],
             ),
-            
+
             const SizedBox(height: AppSpacing.xl),
-            
+
             // Confirmation
             _buildSection(
               title: 'Confirmation',
@@ -332,7 +254,7 @@ class _ActionEditorPageState extends State<ActionEditorPage> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: AppSpacing.xl * 2),
           ],
         ),
@@ -380,100 +302,6 @@ class _ActionEditorPageState extends State<ActionEditorPage> {
             children: children,
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildAgentDropdown() {
-    // Show loading hint if we're waiting for agents to load and have a pending selection
-    final isLoadingAgent = _pendingAgentName != null && _agents.isEmpty;
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'AI Agent',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(AppRadius.small),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String?>(
-              value: _selectedAgentName,
-              isExpanded: true,
-              dropdownColor: AppColors.surface,
-              hint: Text(
-                isLoadingAgent 
-                    ? 'Loading: $_pendingAgentName...'
-                    : 'Select an agent (optional)',
-                style: TextStyle(color: isLoadingAgent ? AppColors.accent : AppColors.textMuted.withOpacity(0.5)),
-              ),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('None', style: TextStyle(color: AppColors.textMuted)),
-                ),
-                ..._agents.map((agent) => DropdownMenuItem<String?>(
-                  value: agent.name,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.psychology, color: AppColors.accent, size: 18),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              agent.name,
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (agent.description.isNotEmpty)
-                              Text(
-                                agent.description,
-                                style: const TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 11,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
-              ],
-              onChanged: (value) {
-                setState(() => _selectedAgentName = value);
-              },
-            ),
-          ),
-        ),
-        if (_agents.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpacing.xs),
-            child: Text(
-              'No agents configured. Create agents in Settings → AI Agents.',
-              style: TextStyle(
-                color: AppColors.textMuted.withOpacity(0.7),
-                fontSize: 11,
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -595,7 +423,7 @@ class _StepCardState extends State<_StepCard> {
           // Drag handle
           const Icon(Icons.drag_handle, color: AppColors.textMuted, size: 20),
           const SizedBox(width: AppSpacing.sm),
-          
+
           // Step number
           Container(
             width: 28,
@@ -616,7 +444,7 @@ class _StepCardState extends State<_StepCard> {
             ),
           ),
           const SizedBox(width: AppSpacing.md),
-          
+
           // Content
           Expanded(
             child: Column(
@@ -661,7 +489,7 @@ class _StepCardState extends State<_StepCard> {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                
+
                 // Content text field
                 TextField(
                   controller: _contentController,
@@ -669,7 +497,7 @@ class _StepCardState extends State<_StepCard> {
                   textCapitalization: TextCapitalization.sentences,
                   style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
                   decoration: InputDecoration(
-                    hintText: widget.step.type == 'question' 
+                    hintText: widget.step.type == 'question'
                         ? 'Enter question'
                         : 'Enter statement',
                     hintStyle: TextStyle(color: AppColors.textMuted.withOpacity(0.5), fontSize: 14),
@@ -688,9 +516,9 @@ class _StepCardState extends State<_StepCard> {
               ],
             ),
           ),
-          
+
           const SizedBox(width: AppSpacing.sm),
-          
+
           // Remove button
           IconButton(
             onPressed: widget.onRemove,
@@ -741,4 +569,3 @@ class _TypeChip extends StatelessWidget {
     );
   }
 }
-

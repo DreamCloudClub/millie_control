@@ -810,20 +810,7 @@ class _MapPanelState extends State<MapPanel> {
           borderRadius: BorderRadius.circular(AppRadius.medium),
         ),
         title: const Text('Add Waypoint', style: TextStyle(color: AppColors.textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Position: (${x.toStringAsFixed(2)}, ${y.toStringAsFixed(2)})',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-            ),
-            Text(
-              'Direction: ${(theta * 180 / 3.14159).toStringAsFixed(0)}°',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
+        content: TextField(
               controller: controller,
               autofocus: true,
               style: const TextStyle(color: AppColors.textPrimary),
@@ -838,8 +825,6 @@ class _MapPanelState extends State<MapPanel> {
                 ),
               ),
             ),
-          ],
-        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -864,7 +849,7 @@ class _MapPanelState extends State<MapPanel> {
       ),
     );
   }
-  
+
   void _addWaypointAtRobot() {
     if (_robotPose == null) {
       _showNotification('Robot position unknown', AppColors.danger);
@@ -885,31 +870,20 @@ class _MapPanelState extends State<MapPanel> {
           borderRadius: BorderRadius.circular(AppRadius.medium),
         ),
         title: const Text('Add Waypoint', style: TextStyle(color: AppColors.textPrimary)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Position: (${x.toStringAsFixed(2)}, ${y.toStringAsFixed(2)})',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: AppColors.textPrimary),
+          decoration: const InputDecoration(
+            hintText: 'Waypoint name (e.g., Kitchen)',
+            hintStyle: TextStyle(color: AppColors.textMuted),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.border),
             ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                hintText: 'Waypoint name (e.g., Kitchen)',
-                hintStyle: TextStyle(color: AppColors.textMuted),
-                enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.border),
-                ),
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.accent),
-                ),
-              ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: AppColors.accent),
             ),
-          ],
+          ),
         ),
         actions: [
           TextButton(

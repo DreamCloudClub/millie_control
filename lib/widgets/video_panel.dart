@@ -20,7 +20,7 @@ class VideoPanel extends StatelessWidget {
           Mjpeg(
             stream: _streamUrl,
             isLive: true,
-            fit: BoxFit.cover,
+            fit: BoxFit.contain,
             error: (context, error, stack) {
               return _buildErrorState();
             },

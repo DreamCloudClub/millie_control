@@ -98,7 +98,7 @@ class RobotApi {
   Future<ApiResult> reboot() async {
     return _post('/api/system/reboot', {});
   }
-  
+
   // === Helper ===
   
   Future<ApiResult> _post(String path, Map<String, dynamic> body) async {

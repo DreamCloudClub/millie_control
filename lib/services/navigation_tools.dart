@@ -21,9 +21,15 @@ class NavigationTools {
   SavedSequence? _currentRoute;
   int _currentStep = 0;
   bool _isPaused = false;
-  
+
+  // Track modes
+  bool _isFollowing = false;
+  bool _isWatching = false;
+  bool _isWandering = false;
+  RobotPose? _goAwayPose;  // Saved position for come_back
+
   NavigationTools(this.rosBridge);
-  
+
   /// Update waypoints from listener
   void updateWaypoints(List<Waypoint> newWaypoints) {
     _localWaypoints = newWaypoints;
@@ -162,6 +168,142 @@ class NavigationTools {
           },
         },
       },
+      // DIRECT MOVEMENT
+      {
+        'type': 'function',
+        'function': {
+          'name': 'move_robot',
+          'description': 'Move the robot directly. Use for "turn left", "turn right", "go forward", "back up", "spin around".',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'direction': {
+                'type': 'string',
+                'enum': ['forward', 'back', 'left', 'right', 'spin_left', 'spin_right', 'stop'],
+                'description': 'Direction to move',
+              },
+            },
+            'required': ['direction'],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'stop_robot',
+          'description': 'Stop the robot immediately. Use when user says "stop", "halt", "freeze".',
+          'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+          },
+        },
+      },
+      // FOLLOW / APPROACH
+      {
+        'type': 'function',
+        'function': {
+          'name': 'follow_user',
+          'description': 'Robot follows the user, maintaining distance. Use when user says "follow me", "come with me".',
+          'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'stop_following',
+          'description': 'Stop following the user. Use when user says "stop following", "stay here", "wait here".',
+          'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'approach_user',
+          'description': 'Robot approaches the detected person. Use when user says "come here", "come closer".',
+          'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+          },
+        },
+      },
+      // WATCH (camera tracking)
+      {
+        'type': 'function',
+        'function': {
+          'name': 'watch_user',
+          'description': 'Camera tracks and centers on the user (robot stays still). Use when user says "watch me", "look at me", "keep me in frame".',
+          'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'stop_watching',
+          'description': 'Stop tracking the user with camera. Use when user says "stop watching", "look away".',
+          'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+          },
+        },
+      },
+      // WANDER
+      {
+        'type': 'function',
+        'function': {
+          'name': 'go_away',
+          'description': 'Robot goes away and wanders. Saves current position to return to later. Use when user says "go away", "leave me alone", "go explore".',
+          'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+          },
+        },
+      },
+      {
+        'type': 'function',
+        'function': {
+          'name': 'come_back',
+          'description': 'Robot returns to where it was when told to go away. Use when user says "come back" or "return".',
+          'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+          },
+        },
+      },
+      // SPEAK
+      {
+        'type': 'function',
+        'function': {
+          'name': 'say_message',
+          'description': 'Make the robot say something out loud through its speakers. Use when user wants the robot to speak a message.',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'message': {
+                'type': 'string',
+                'description': 'The message for the robot to say',
+              },
+            },
+            'required': ['message'],
+          },
+        },
+      },
     ];
   }
   
@@ -196,7 +338,37 @@ class NavigationTools {
         
       case 'get_robot_status':
         return _getRobotStatus();
-        
+
+      case 'move_robot':
+        return _moveRobot(arguments['direction'] as String);
+
+      case 'stop_robot':
+        return _stopRobot();
+
+      case 'follow_user':
+        return _followUser();
+
+      case 'stop_following':
+        return _stopFollowing();
+
+      case 'approach_user':
+        return _approachUser();
+
+      case 'watch_user':
+        return _watchUser();
+
+      case 'stop_watching':
+        return _stopWatching();
+
+      case 'go_away':
+        return _goAway();
+
+      case 'come_back':
+        return _comeBack();
+
+      case 'say_message':
+        return _sayMessage(arguments['message'] as String);
+
       default:
         return 'Unknown tool: $toolName';
     }
@@ -339,11 +511,11 @@ class NavigationTools {
     if (currentPose == null) {
       return 'Robot position unknown. The robot may still be localizing.';
     }
-    
+
     // Find nearest waypoint
     String nearestWaypoint = 'unknown location';
     double minDist = double.infinity;
-    
+
     for (final wp in waypoints) {
       final dx = wp.x - currentPose!.x;
       final dy = wp.y - currentPose!.y;
@@ -353,11 +525,85 @@ class NavigationTools {
         nearestWaypoint = wp.name;
       }
     }
-    
+
     final distMeters = minDist < 0.5 ? 'at' : '${(minDist * 10).round() / 10}m from';
     return 'The robot is $distMeters $nearestWaypoint. Position: (${currentPose!.x.toStringAsFixed(2)}, ${currentPose!.y.toStringAsFixed(2)})';
   }
-  
+
+  String _moveRobot(String direction) {
+    rosBridge.publishMove(direction);
+    final descriptions = {
+      'forward': 'Moving forward',
+      'back': 'Backing up',
+      'left': 'Turning left',
+      'right': 'Turning right',
+      'spin_left': 'Spinning left',
+      'spin_right': 'Spinning right',
+      'stop': 'Stopping',
+    };
+    return descriptions[direction] ?? 'Moving $direction';
+  }
+
+  String _stopRobot() {
+    rosBridge.publishEstop();
+    return 'Robot stopped.';
+  }
+
+  String _followUser() {
+    rosBridge.publishEnablePersonFollower();
+    _isFollowing = true;
+    return 'Following mode enabled. The robot will follow you.';
+  }
+
+  String _stopFollowing() {
+    rosBridge.publishDisablePersonFollower();
+    _isFollowing = false;
+    return 'Following mode disabled. The robot will stay here.';
+  }
+
+  String _approachUser() {
+    // Enable follower briefly to approach, it will stop when close
+    rosBridge.publishEnablePersonFollower();
+    return 'Approaching. The robot is coming to you.';
+  }
+
+  String _watchUser() {
+    rosBridge.publishCenterOnHuman(true);
+    _isWatching = true;
+    return 'Watching mode enabled. The camera will track you.';
+  }
+
+  String _stopWatching() {
+    rosBridge.publishCenterOnHuman(false);
+    _isWatching = false;
+    return 'Watching mode disabled.';
+  }
+
+  String _goAway() {
+    // Save current position for come_back
+    _goAwayPose = currentPose;
+    rosBridge.publishWanderEnable();
+    _isWandering = true;
+    return 'Going away to explore. Say "come back" when you want me to return.';
+  }
+
+  String _comeBack() {
+    rosBridge.publishWanderDisable();
+    _isWandering = false;
+
+    if (_goAwayPose != null) {
+      // Navigate back to saved position
+      rosBridge.publishNavGoal(_goAwayPose!.x, _goAwayPose!.y);
+      return 'Coming back to where I was.';
+    }
+    return 'Stopping wander mode.';
+  }
+
+  String _sayMessage(String message) {
+    rosBridge.publishSpeak(message);
+    return 'Speaking: "$message"';
+  }
+
   /// Build system prompt with current context
   String buildSystemPrompt() {
     final waypointList = waypoints.isNotEmpty 
@@ -368,24 +614,31 @@ class NavigationTools {
         ? routes.map((r) => '${r.name} (${r.waypointNames.join(' → ')})').join('; ')
         : 'none saved yet';
     
-    return '''You are Millie, a friendly robot assistant that can navigate around the house.
-You help users by understanding their requests and navigating to locations or executing routes.
+    return '''You are Millie, a friendly robot assistant. You are being controlled remotely via this chat interface.
 
 AVAILABLE WAYPOINTS: $waypointList
 SAVED ROUTES: $routeList
 
-When users ask you to go somewhere or do a route, use the appropriate navigation tools.
-Be conversational and friendly. Confirm what you're doing.
-Keep responses brief and natural - you're a helpful robot companion.
+You can:
+- Navigate to locations and execute routes
+- Move directly (forward, back, turn, spin)
+- Follow users or approach them
+- Watch users with camera tracking
+- Wander around or come back
+- Speak messages out loud through the robot
+
+Be conversational and brief. Confirm what you're doing.
 
 Examples:
-- "Go to the kitchen" → use navigate_to_waypoint with "kitchen"
-- "Do the full cycle" → use execute_route with the route name
-- "Pause" / "Wait" → use pause_navigation
-- "Resume" / "Continue" → use resume_navigation  
-- "Restart" / "Start over" → use restart_navigation
-- "Stop" / "Cancel" → use stop_navigation
-- "Where can you go?" → use get_available_locations''';
+- "Go to the kitchen" → navigate_to_waypoint
+- "Follow me" → follow_user
+- "Come here" → approach_user
+- "Watch me" → watch_user
+- "Go away" → go_away (wander)
+- "Come back" → come_back
+- "Turn left" → move_robot with "left"
+- "Stop" → stop_robot
+- "Say hello to everyone" → say_message''';
   }
 }
 
