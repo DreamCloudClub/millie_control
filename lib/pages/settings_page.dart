@@ -1863,7 +1863,6 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
 
   final _nameController = TextEditingController();
   final _personalityController = TextEditingController();
-  final _introMessageController = TextEditingController();
   String _selectedFaceId = '';
   String _selectedVoice = 'nova';
   String _voiceMode = 'turn_taking';
@@ -1910,14 +1909,12 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
     widget.rosBridge.removeAgentListener(_agentListener);  // Multi-listener cleanup
     _nameController.dispose();
     _personalityController.dispose();
-    _introMessageController.dispose();
     super.dispose();
   }
   
   void _startNewAgent() {
     _nameController.clear();
     _personalityController.clear();
-    _introMessageController.clear();
     _selectedFaceId = '';
     _selectedVoice = 'nova';
     _voiceMode = 'turn_taking';
@@ -1928,7 +1925,6 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
     final agent = _agents[index];
     _nameController.text = agent.name;
     _personalityController.text = agent.personality;
-    _introMessageController.text = agent.introMessage;
     _selectedFaceId = agent.faceId;
     _selectedVoice = agent.voice.isNotEmpty ? agent.voice : 'nova';
     _voiceMode = agent.voiceMode;
@@ -1953,7 +1949,6 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
       voice: _selectedVoice,
       voiceMode: _voiceMode,
       personality: _personalityController.text.trim(),
-      introMessage: _introMessageController.text.trim(),
       isDefault: existingIsDefault,
     );
 
@@ -2300,14 +2295,6 @@ class _AIAgentsSectionState extends State<_AIAgentsSection> {
                   label: 'Personality',
                   hint: 'Describe how this agent should behave and speak',
                   maxLines: 3,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                _buildTextField(
-                  controller: _introMessageController,
-                  label: 'Intro Message',
-                  hint: 'What the agent says when starting a conversation',
-                  maxLines: 2,
                   textCapitalization: TextCapitalization.sentences,
                 ),
                 const SizedBox(height: AppSpacing.lg),

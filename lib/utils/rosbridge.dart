@@ -302,7 +302,6 @@ class AgentDefinition {
   final String voice;
   final String voiceMode; // 'turn_taking' or 'realtime'
   final String personality;
-  final String introMessage;
   final bool isDefault;
 
   AgentDefinition({
@@ -311,7 +310,6 @@ class AgentDefinition {
     this.voice = 'nova',
     this.voiceMode = 'turn_taking',
     this.personality = '',
-    this.introMessage = '',
     this.isDefault = false,
   });
 
@@ -321,7 +319,6 @@ class AgentDefinition {
     'voice': voice,
     'voice_mode': voiceMode,
     'personality': personality,
-    'intro_message': introMessage,
     'is_default': isDefault,
   };
 
@@ -331,7 +328,6 @@ class AgentDefinition {
     voice: json['voice'] as String? ?? 'nova',
     voiceMode: json['voice_mode'] as String? ?? 'turn_taking',
     personality: json['personality'] as String? ?? '',
-    introMessage: json['intro_message'] as String? ?? '',
     isDefault: json['is_default'] as bool? ?? false,
   );
 
@@ -341,7 +337,6 @@ class AgentDefinition {
     String? voice,
     String? voiceMode,
     String? personality,
-    String? introMessage,
     bool? isDefault,
   }) => AgentDefinition(
     name: name ?? this.name,
@@ -349,7 +344,6 @@ class AgentDefinition {
     voice: voice ?? this.voice,
     voiceMode: voiceMode ?? this.voiceMode,
     personality: personality ?? this.personality,
-    introMessage: introMessage ?? this.introMessage,
     isDefault: isDefault ?? this.isDefault,
   );
 }
