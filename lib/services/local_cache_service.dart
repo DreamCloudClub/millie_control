@@ -2,15 +2,16 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/rosbridge.dart';
 
-/// Service for caching agents, user profile, and memories locally.
+/// Service for caching agents and user profile locally.
 /// ROS remains source of truth - when connected, ROS data overwrites local cache.
 class LocalCacheService {
   static const String _agentsKey = 'cached_agents';
   static const String _userProfileKey = 'cached_user_profile';
-  static const String _memoriesKey = 'cached_memories';
   static const String _detectionOverlayKey = 'camera_detection_overlay';
   static const String _lowBandwidthKey = 'camera_low_bandwidth';
   static const String _centerOnHumanKey = 'camera_center_on_human';
+  static const String _voiceIdleTimeoutKey = 'voice_idle_timeout';
+  static const String _openaiApiKeyKey = 'openai_api_key';
 
   // ============================================================
   // Agents
@@ -75,36 +76,6 @@ class LocalCacheService {
   }
 
   // ============================================================
-  // Memories
-  // ============================================================
-
-  /// Load cached memories from SharedPreferences
-  static Future<MemoryData?> loadMemories() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonStr = prefs.getString(_memoriesKey);
-
-    if (jsonStr == null) {
-      return null;
-    }
-
-    try {
-      final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-      return MemoryData.fromJson(json);
-    } catch (e) {
-      print('Error loading cached memories: $e');
-      return null;
-    }
-  }
-
-  /// Save memories to local cache
-  static Future<void> saveMemories(MemoryData memories) async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonStr = jsonEncode(memories.toJson());
-    await prefs.setString(_memoriesKey, jsonStr);
-    print('💾 Cached memories: ${memories.owner.notes.length} owner notes, ${memories.people.length} people, ${memories.notes.length} notes');
-  }
-
-  // ============================================================
   // Camera Settings
   // ============================================================
 
@@ -145,6 +116,40 @@ class LocalCacheService {
   }
 
   // ============================================================
+  // Voice Settings
+  // ============================================================
+
+  /// Load voice idle timeout setting (default: 60 seconds)
+  static Future<int> loadVoiceIdleTimeout() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_voiceIdleTimeoutKey) ?? 60;
+  }
+
+  /// Save voice idle timeout setting
+  static Future<void> saveVoiceIdleTimeout(int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_voiceIdleTimeoutKey, seconds);
+  }
+
+  // ============================================================
+  // OpenAI API Key
+  // ============================================================
+
+  /// Load cached OpenAI API key
+  static Future<String?> loadOpenAIApiKey() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_openaiApiKeyKey);
+  }
+
+  /// Save OpenAI API key to local cache
+  static Future<void> saveOpenAIApiKey(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_openaiApiKeyKey, key);
+    final prefix = key.length > 15 ? '${key.substring(0, 7)}...${key.substring(key.length - 4)}' : '***';
+    print('💾 Cached OpenAI API key: $prefix');
+  }
+
+  // ============================================================
   // Utility
   // ============================================================
 
@@ -153,7 +158,6 @@ class LocalCacheService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_agentsKey);
     await prefs.remove(_userProfileKey);
-    await prefs.remove(_memoriesKey);
     print('🗑️ Cleared all cached data');
   }
 }

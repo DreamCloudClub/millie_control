@@ -8,7 +8,7 @@ import '../utils/rosbridge.dart';
 import 'top_notification.dart';
 
 /// Map interaction modes
-enum MapMode { none, setPose, addWaypoint }
+enum MapMode { none, setPose, addWaypoint, drawLane }
 
 /// Painter for direction dial
 class _DirectionDialPainter extends CustomPainter {
@@ -119,6 +119,10 @@ class _MapPanelState extends State<MapPanel> {
   
   // Laser scan data
   LaserScan? _laserScan;
+
+  // Lane drawing state
+  List<Offset> _laneDrawPoints = [];  // Screen points while drawing
+  List<Lane> _savedLanes = [];        // Saved lanes in map coords (from ROS)
   
   // Multi-listener callbacks (for cleanup)
   late final void Function(MapData) _mapListener;
@@ -126,6 +130,7 @@ class _MapPanelState extends State<MapPanel> {
   late final void Function(List<Waypoint>) _waypointListener;
   late final void Function(NavStatus) _navStatusListener;
   late final void Function(LaserScan) _laserScanListener;
+  late final void Function(List<Lane>) _lanesListener;
   
   // Map display settings
   double get _pixelsPerMeter => _mapData != null ? (1.0 / _mapData!.resolution) : 50.0;
@@ -175,7 +180,15 @@ class _MapPanelState extends State<MapPanel> {
       }
     };
     widget.rosBridge.addLaserScanListener(_laserScanListener);
-    
+
+    // Listen for lanes updates (multi-listener pattern)
+    _lanesListener = (lanes) {
+      if (mounted) {
+        setState(() => _savedLanes = lanes);
+      }
+    };
+    widget.rosBridge.addLanesListener(_lanesListener);
+
     // Request initial waypoints
     widget.rosBridge.requestWaypoints();
   }
@@ -187,6 +200,7 @@ class _MapPanelState extends State<MapPanel> {
     widget.rosBridge.removeMapListener(_mapListener);  // Multi-listener cleanup
     widget.rosBridge.removeNavStatusListener(_navStatusListener);  // Multi-listener cleanup
     widget.rosBridge.removeLaserScanListener(_laserScanListener);  // Multi-listener cleanup
+    widget.rosBridge.removeLanesListener(_lanesListener);  // Multi-listener cleanup
     _mapImage?.dispose();
     super.dispose();
   }
@@ -313,6 +327,8 @@ class _MapPanelState extends State<MapPanel> {
                         waypoints: _waypoints,
                         selectedWaypoint: _selectedWaypoint,
                         laserScan: _laserScan,
+                        savedLanes: _savedLanes,
+                        laneDrawPoints: _laneDrawPoints,
                       ),
                       size: Size(constraints.maxWidth, constraints.maxHeight),
                     ),
@@ -349,7 +365,11 @@ class _MapPanelState extends State<MapPanel> {
                   onCenterRobot: _centerOnRobot,
                   onSetPose: _togglePoseMode,
                   onAddWaypoint: _saveWaypointAtRobot,
+                  onDrawLane: _toggleDrawLaneMode,
+                  onClearLaneDrawing: _clearLaneDrawing,
                   mapMode: _mapMode,
+                  hasLanes: _savedLanes.isNotEmpty,
+                  isDrawingLane: _laneDrawPoints.isNotEmpty,
                 ),
               ),
               
@@ -559,7 +579,15 @@ class _MapPanelState extends State<MapPanel> {
   
   void _onScaleStart(ScaleStartDetails details) {
     _lastFocalPoint = details.focalPoint;
-    
+
+    // If drawing lane, start with first point
+    if (_mapMode == MapMode.drawLane) {
+      setState(() {
+        _laneDrawPoints = [details.localFocalPoint];
+      });
+      return;
+    }
+
     // If in a mode, record start position
     if (_mapMode != MapMode.none) {
       _modeStartScreen = details.localFocalPoint;
@@ -568,17 +596,29 @@ class _MapPanelState extends State<MapPanel> {
   }
   
   void _onScaleUpdate(ScaleUpdateDetails details) {
+    // If drawing lane, add points
+    if (_mapMode == MapMode.drawLane) {
+      setState(() {
+        // Only add point if it's far enough from the last one (reduces noise)
+        if (_laneDrawPoints.isEmpty ||
+            (details.localFocalPoint - _laneDrawPoints.last).distance > 5) {
+          _laneDrawPoints.add(details.localFocalPoint);
+        }
+      });
+      return;
+    }
+
     if (_mapMode != MapMode.none) {
       // In mode - just track position, don't pan/zoom
       _lastPanPosition = details.localFocalPoint;
       return;
     }
-    
+
     // Normal pan/zoom
     setState(() {
       _offset += details.focalPoint - _lastFocalPoint;
       _lastFocalPoint = details.focalPoint;
-      
+
       if (details.scale != 1.0) {
         // Dampen zoom sensitivity (0.3 = 30% of the gesture)
         final dampedScale = 1.0 + (details.scale - 1.0) * 0.3;
@@ -588,20 +628,26 @@ class _MapPanelState extends State<MapPanel> {
   }
   
   void _onScaleEnd(ScaleEndDetails details) {
+    // If drawing lane, show save dialog
+    if (_mapMode == MapMode.drawLane && _laneDrawPoints.length > 1) {
+      _showSaveLaneDialog();
+      return;
+    }
+
     if (_mapMode != MapMode.none && _dragStartWorld != null) {
       final x = _dragStartWorld!.dx;
       final y = _dragStartWorld!.dy;
-      
+
       // Use robot's current heading or 0 for now
       final theta = _robotPose?.theta ?? 0.0;
-      
+
       if (_mapMode == MapMode.setPose) {
         widget.rosBridge.publishInitialPose(x, y, theta: theta);
-        _showNotification('🤖 Robot pose set at (${x.toStringAsFixed(1)}, ${y.toStringAsFixed(1)})', AppColors.accent);
+        _showNotification('Robot pose set at (${x.toStringAsFixed(1)}, ${y.toStringAsFixed(1)})', AppColors.accent);
       } else if (_mapMode == MapMode.addWaypoint) {
         _showAddWaypointDialogWithTheta(x, y, theta);
       }
-      
+
       setState(() {
         _mapMode = MapMode.none;
         _dragStartWorld = null;
@@ -610,16 +656,63 @@ class _MapPanelState extends State<MapPanel> {
       });
     }
   }
+
+  void _showSaveLaneDialog() {
+    final simplified = _simplifyPath(_laneDrawPoints, epsilon: 10.0);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Save Lane?', style: TextStyle(color: AppColors.textPrimary)),
+        content: Text(
+          'Save this lane path?\n${_laneDrawPoints.length} points → ${simplified.length} points (simplified)',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _clearLaneDrawing();
+            },
+            child: const Text('Clear'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Keep drawing - don't clear
+            },
+            child: const Text('Keep Drawing'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
+            onPressed: () {
+              Navigator.pop(context);
+              _saveLane();
+            },
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
   
   void _handleTap(TapUpDetails details) {
     if (_mapMode != MapMode.none) {
       final worldPos = _screenToWorld(details.localPosition);
       _showDirectionPicker(worldPos.dx, worldPos.dy);
     } else {
-      // Check if tapped on a waypoint
       final worldPos = _screenToWorld(details.localPosition);
+
+      // Check if tapped on a lane first
+      final tappedLaneId = _hitTestLanes(worldPos);
+      if (tappedLaneId != null) {
+        _deleteLane(tappedLaneId);
+        return;
+      }
+
+      // Check if tapped on a waypoint
       Waypoint? tappedWaypoint;
-      
+
       for (final wp in _waypoints) {
         final dx = wp.x - worldPos.dx;
         final dy = wp.y - worldPos.dy;
@@ -630,7 +723,7 @@ class _MapPanelState extends State<MapPanel> {
           break;
         }
       }
-      
+
       setState(() => _selectedWaypoint = tappedWaypoint);
     }
   }
@@ -789,6 +882,133 @@ class _MapPanelState extends State<MapPanel> {
     if (_mapMode == MapMode.setPose) {
       _showNotification('Tap on map to set robot position', AppColors.warning);
     }
+  }
+
+  void _toggleDrawLaneMode() {
+    setState(() {
+      if (_mapMode == MapMode.drawLane) {
+        _mapMode = MapMode.none;
+        _laneDrawPoints = [];
+      } else {
+        _mapMode = MapMode.drawLane;
+        _laneDrawPoints = [];
+        _showNotification('Draw a lane path on the map', AppColors.accent);
+      }
+    });
+  }
+
+  void _clearLaneDrawing() {
+    setState(() {
+      _laneDrawPoints = [];
+    });
+  }
+
+  void _deleteLane(int laneId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('Delete Lane?', style: TextStyle(color: AppColors.textPrimary)),
+        content: const Text('This will remove this lane path.', style: TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      widget.rosBridge.publishDeleteLane(laneId);
+      _showNotification('Lane deleted', AppColors.warning);
+    }
+  }
+
+  /// Check if a tap hit any lane and return the lane ID, or null
+  int? _hitTestLanes(Offset worldPos) {
+    const hitRadius = 0.3;  // meters - how close to lane to count as hit
+
+    for (final lane in _savedLanes) {
+      for (final point in lane.points) {
+        final dx = point.x - worldPos.dx;
+        final dy = point.y - worldPos.dy;
+        final dist = math.sqrt(dx * dx + dy * dy);
+        if (dist < hitRadius) {
+          return lane.id;
+        }
+      }
+    }
+    return null;
+  }
+
+  void _saveLane() {
+    if (_laneDrawPoints.isEmpty) return;
+
+    // Simplify the drawn path using Ramer-Douglas-Peucker algorithm
+    final simplified = _simplifyPath(_laneDrawPoints, epsilon: 10.0);
+
+    // Convert simplified screen points to map coordinates
+    final lanePoints = simplified.map((screenPoint) {
+      final world = _screenToWorld(screenPoint);
+      return LanePoint(x: world.dx, y: world.dy);
+    }).toList();
+
+    widget.rosBridge.publishAddLane(lanePoints);
+    setState(() {
+      _mapMode = MapMode.none;
+      _laneDrawPoints = [];
+    });
+    _showNotification('Lane saved (${lanePoints.length} points)', AppColors.success);
+  }
+
+  /// Ramer-Douglas-Peucker line simplification algorithm
+  /// Reduces points while preserving the overall shape
+  List<Offset> _simplifyPath(List<Offset> points, {double epsilon = 10.0}) {
+    if (points.length < 3) return points;
+
+    // Find the point with maximum distance from the line between first and last
+    double maxDist = 0;
+    int maxIndex = 0;
+    final first = points.first;
+    final last = points.last;
+
+    for (int i = 1; i < points.length - 1; i++) {
+      final dist = _perpendicularDistance(points[i], first, last);
+      if (dist > maxDist) {
+        maxDist = dist;
+        maxIndex = i;
+      }
+    }
+
+    // If max distance is greater than epsilon, recursively simplify
+    if (maxDist > epsilon) {
+      final left = _simplifyPath(points.sublist(0, maxIndex + 1), epsilon: epsilon);
+      final right = _simplifyPath(points.sublist(maxIndex), epsilon: epsilon);
+      // Combine results (avoid duplicating the middle point)
+      return [...left.sublist(0, left.length - 1), ...right];
+    } else {
+      // All intermediate points are within tolerance, keep only endpoints
+      return [first, last];
+    }
+  }
+
+  /// Calculate perpendicular distance from point to line (defined by lineStart and lineEnd)
+  double _perpendicularDistance(Offset point, Offset lineStart, Offset lineEnd) {
+    final dx = lineEnd.dx - lineStart.dx;
+    final dy = lineEnd.dy - lineStart.dy;
+
+    // Handle case where line is actually a point
+    if (dx == 0 && dy == 0) {
+      return (point - lineStart).distance;
+    }
+
+    // Calculate perpendicular distance using cross product formula
+    final numerator = (dy * point.dx - dx * point.dy + lineEnd.dx * lineStart.dy - lineEnd.dy * lineStart.dx).abs();
+    final denominator = math.sqrt(dx * dx + dy * dy);
+    return numerator / denominator;
   }
   
   void _saveWaypointAtRobot() {
@@ -959,7 +1179,11 @@ class _MapControls extends StatelessWidget {
   final VoidCallback onCenterRobot;
   final VoidCallback onSetPose;
   final VoidCallback onAddWaypoint;
+  final VoidCallback onDrawLane;
+  final VoidCallback onClearLaneDrawing;
   final MapMode mapMode;
+  final bool hasLanes;
+  final bool isDrawingLane;
 
   const _MapControls({
     required this.onZoomIn,
@@ -968,7 +1192,11 @@ class _MapControls extends StatelessWidget {
     required this.onCenterRobot,
     required this.onSetPose,
     required this.onAddWaypoint,
+    required this.onDrawLane,
+    required this.onClearLaneDrawing,
     required this.mapMode,
+    required this.hasLanes,
+    required this.isDrawingLane,
   });
 
   @override
@@ -989,6 +1217,23 @@ class _MapControls extends StatelessWidget {
           tooltip: 'Save waypoint here',
           isActive: false,
         ),
+        const SizedBox(height: AppSpacing.xs),
+        // Lane controls
+        _ControlButton(
+          icon: Icons.timeline,
+          onPressed: onDrawLane,
+          tooltip: mapMode == MapMode.drawLane ? 'Cancel drawing' : 'Draw lane',
+          isActive: mapMode == MapMode.drawLane,
+        ),
+        if (isDrawingLane) ...[
+          const SizedBox(height: AppSpacing.xs),
+          _ControlButton(
+            icon: Icons.clear,
+            onPressed: onClearLaneDrawing,
+            tooltip: 'Clear drawing',
+            isActive: false,
+          ),
+        ],
         const SizedBox(height: AppSpacing.md),
         // Zoom/view controls
         _ControlButton(icon: Icons.add, onPressed: onZoomIn, tooltip: 'Zoom in'),
@@ -1293,6 +1538,8 @@ class _FullMapPainter extends CustomPainter {
   final List<Waypoint> waypoints;
   final Waypoint? selectedWaypoint;
   final LaserScan? laserScan;
+  final List<Lane> savedLanes;
+  final List<Offset> laneDrawPoints;
 
   _FullMapPainter({
     required this.mapImage,
@@ -1303,6 +1550,8 @@ class _FullMapPainter extends CustomPainter {
     required this.waypoints,
     required this.selectedWaypoint,
     this.laserScan,
+    this.savedLanes = const [],
+    this.laneDrawPoints = const [],
   });
 
   @override
@@ -1326,18 +1575,78 @@ class _FullMapPainter extends CustomPainter {
     if (laserScan != null && robotPose != null && mapData != null) {
       _drawLaserScan(canvas, laserScan!, robotPose!);
     }
-    
+
+    // Draw all saved lanes (in map coordinates)
+    if (savedLanes.isNotEmpty && mapData != null) {
+      for (final lane in savedLanes) {
+        _drawSavedLane(canvas, lane);
+      }
+    }
+
     // Draw waypoints
     for (final wp in waypoints) {
       _drawWaypoint(canvas, wp, wp.name == selectedWaypoint?.name);
     }
-    
+
     // Draw robot
     if (robotPose != null && mapData != null) {
       _drawRobot(canvas, robotPose!);
     }
-    
+
     canvas.restore();
+
+    // Draw lane being drawn (in screen coordinates, outside transform)
+    if (laneDrawPoints.length > 1) {
+      _drawLaneDrawing(canvas);
+    }
+  }
+
+  void _drawSavedLane(Canvas canvas, Lane lane) {
+    if (lane.points.length < 2) return;
+
+    final paint = Paint()
+      ..color = const Color(0xFF2196F3).withOpacity(0.8)  // Blue
+      ..strokeWidth = 6 / scale
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    final path = Path();
+    final firstPoint = _worldToMap(lane.points[0].x, lane.points[0].y);
+    path.moveTo(firstPoint.dx, firstPoint.dy);
+
+    for (int i = 1; i < lane.points.length; i++) {
+      final point = _worldToMap(lane.points[i].x, lane.points[i].y);
+      path.lineTo(point.dx, point.dy);
+    }
+
+    canvas.drawPath(path, paint);
+
+    // Draw start/end markers (white)
+    final startPos = _worldToMap(lane.points.first.x, lane.points.first.y);
+    final endPos = _worldToMap(lane.points.last.x, lane.points.last.y);
+
+    canvas.drawCircle(startPos, 8 / scale, Paint()..color = Colors.white);
+    canvas.drawCircle(endPos, 8 / scale, Paint()..color = Colors.white);
+  }
+
+  void _drawLaneDrawing(Canvas canvas) {
+    // Draw in screen space (not transformed)
+    final paint = Paint()
+      ..color = const Color(0xFF2196F3).withOpacity(0.6)  // Blue while drawing
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    final path = Path();
+    path.moveTo(laneDrawPoints[0].dx, laneDrawPoints[0].dy);
+
+    for (int i = 1; i < laneDrawPoints.length; i++) {
+      path.lineTo(laneDrawPoints[i].dx, laneDrawPoints[i].dy);
+    }
+
+    canvas.drawPath(path, paint);
   }
   
   void _drawMap(Canvas canvas) {
@@ -1504,7 +1813,9 @@ class _FullMapPainter extends CustomPainter {
            oldDelegate.robotPose != robotPose ||
            oldDelegate.waypoints != waypoints ||
            oldDelegate.selectedWaypoint != selectedWaypoint ||
-           oldDelegate.laserScan != laserScan;
+           oldDelegate.laserScan != laserScan ||
+           oldDelegate.savedLanes != savedLanes ||
+           oldDelegate.laneDrawPoints != laneDrawPoints;
   }
 }
 

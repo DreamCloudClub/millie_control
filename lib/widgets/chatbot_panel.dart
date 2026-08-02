@@ -272,9 +272,15 @@ class _ChatbotPanelState extends State<ChatbotPanel> {
       }
 
       // Handle tool calls
+      debugPrint('🤖 [ChatBot] Response hasToolCalls: ${response.hasToolCalls}');
+      if (response.hasToolCalls) {
+        debugPrint('🤖 [ChatBot] Tool calls: ${response.toolCalls?.map((t) => t.name).toList()}');
+      }
       while (response != null && response.hasToolCalls) {
         for (final toolCall in response.toolCalls!) {
+          debugPrint('🔧 [ChatBot] Executing tool: ${toolCall.name}');
           final result = _navTools.executeTool(toolCall.name, toolCall.arguments);
+          debugPrint('🔧 [ChatBot] Tool result: $result');
           
           // Add tool call to history
           _conversationHistory.add({

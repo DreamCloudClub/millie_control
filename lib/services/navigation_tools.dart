@@ -291,7 +291,7 @@ class NavigationTools {
         'type': 'function',
         'function': {
           'name': 'say_message',
-          'description': 'Make the robot say something out loud through its speakers. Use when user wants the robot to speak a message.',
+          'description': 'Make the robot say something out loud through its speakers immediately. Use when user wants the robot to speak a message right now where it is.',
           'parameters': {
             'type': 'object',
             'properties': {
@@ -301,6 +301,28 @@ class NavigationTools {
               },
             },
             'required': ['message'],
+          },
+        },
+      },
+      // DELIVER MESSAGE
+      {
+        'type': 'function',
+        'function': {
+          'name': 'deliver_message',
+          'description': 'Navigate to a location and deliver a message. Use when user wants to send a message to someone at a specific place, like "tell Sarah in the kitchen that dinner is ready" or "go to the office and say the meeting is starting".',
+          'parameters': {
+            'type': 'object',
+            'properties': {
+              'destination': {
+                'type': 'string',
+                'description': 'The waypoint/location to navigate to',
+              },
+              'message': {
+                'type': 'string',
+                'description': 'The FULL message to speak when the robot arrives. Include a greeting with the recipient name if mentioned (e.g., "Hi Tom! There is a meeting at 4 o clock."). Make it conversational and complete.',
+              },
+            },
+            'required': ['destination', 'message'],
           },
         },
       },
@@ -368,6 +390,16 @@ class NavigationTools {
 
       case 'say_message':
         return _sayMessage(arguments['message'] as String);
+
+      case 'deliver_message':
+        final dest = arguments['destination'] as String?;
+        final msg = arguments['message'] as String?;
+        debugPrint('🎯 [deliver_message] CALLED with dest="$dest", msg="$msg"');
+        if (dest == null || msg == null) {
+          return 'Missing destination or message';
+        }
+        _deliverMessageAsync(dest, msg);
+        return 'Delivering message to $dest...';
 
       default:
         return 'Unknown tool: $toolName';
@@ -604,6 +636,54 @@ class NavigationTools {
     return 'Speaking: "$message"';
   }
 
+  Future<void> _deliverMessageAsync(String destination, String message) async {
+    try {
+      debugPrint('🚀 [deliver_message] Starting: dest="$destination", msg="$message"');
+      debugPrint('🚀 [deliver_message] Available waypoints: ${waypoints.map((w) => w.name).toList()}');
+
+      // Find the waypoint (case-insensitive)
+      final waypoint = waypoints.firstWhere(
+        (w) => w.name.toLowerCase() == destination.toLowerCase(),
+        orElse: () => Waypoint(name: '', x: 0, y: 0),
+      );
+
+      if (waypoint.name.isEmpty) {
+        debugPrint('❌ [deliver_message] Waypoint "$destination" not found!');
+        return;
+      }
+
+      debugPrint('📍 [deliver_message] Found waypoint: ${waypoint.name}');
+
+      // Create action for the message (same as millie_ai's approach)
+      final actionName = 'Message: ${waypoint.name}';
+      final action = ActionDefinition(
+        name: actionName,
+        description: 'Deliver message to ${waypoint.name}',
+        openingGreeting: message,
+        source: 'controller',
+      );
+
+      // Save action first (syncs to ROS and millie_ai)
+      rosBridge.publishSaveAction(action);
+      debugPrint('📤 [deliver_message] Saved action: $actionName');
+
+      // Wait for action to be saved (same delay as millie_ai)
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Create workflow: navigate then execute the action
+      final steps = [
+        {'type': 'navigate', 'value': waypoint.name},
+        {'type': 'action', 'value': actionName},
+      ];
+
+      rosBridge.publishWorkflow(steps);
+      debugPrint('✅ [deliver_message] Published workflow: navigate to ${waypoint.name}, then action');
+    } catch (e, stack) {
+      debugPrint('❌ [deliver_message] ERROR: $e');
+      debugPrint('$stack');
+    }
+  }
+
   /// Build system prompt with current context
   String buildSystemPrompt() {
     final waypointList = waypoints.isNotEmpty 
@@ -614,31 +694,29 @@ class NavigationTools {
         ? routes.map((r) => '${r.name} (${r.waypointNames.join(' → ')})').join('; ')
         : 'none saved yet';
     
-    return '''You are Millie, a friendly robot assistant. You are being controlled remotely via this chat interface.
+    return '''You are Millie, a friendly robot assistant controlled remotely via this chat interface.
 
 AVAILABLE WAYPOINTS: $waypointList
 SAVED ROUTES: $routeList
 
-You can:
-- Navigate to locations and execute routes
-- Move directly (forward, back, turn, spin)
-- Follow users or approach them
-- Watch users with camera tracking
-- Wander around or come back
-- Speak messages out loud through the robot
+RULES:
+1. Act immediately - don't ask clarifying questions. Use the information given.
+2. If a location is mentioned, match it to a waypoint (case-insensitive, partial match OK).
+3. For deliver_message, craft a complete greeting with the person's name.
+4. Be brief in responses. Just confirm what you're doing.
 
-Be conversational and brief. Confirm what you're doing.
+TOOLS:
+- navigate_to_waypoint: "Go to tom" → navigates to the "tom" waypoint
+- deliver_message: "Tell Tom meeting at 4" → destination: "tom", message: "Hi Tom! Meeting at 4 o'clock."
+- say_message: "Say hello" (speaks immediately where robot is)
+- follow_user / stop_following: "Follow me" / "Stay here"
+- approach_user: "Come here"
+- watch_user / stop_watching: "Watch me" / "Look away"
+- go_away / come_back: "Go away" / "Come back"
+- move_robot: "Turn left", "Go forward", "Back up"
+- stop_robot: "Stop"
 
-Examples:
-- "Go to the kitchen" → navigate_to_waypoint
-- "Follow me" → follow_user
-- "Come here" → approach_user
-- "Watch me" → watch_user
-- "Go away" → go_away (wander)
-- "Come back" → come_back
-- "Turn left" → move_robot with "left"
-- "Stop" → stop_robot
-- "Say hello to everyone" → say_message''';
+IMPORTANT: For deliver_message, the destination MUST be one of the AVAILABLE WAYPOINTS listed above. Match the person's name to a waypoint name.''';
   }
 }
 

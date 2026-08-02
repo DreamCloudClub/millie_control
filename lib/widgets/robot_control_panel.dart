@@ -88,45 +88,17 @@ class _RobotControlPanelState extends State<RobotControlPanel> {
   }
   
   Future<void> _saveMap() async {
-    final controller = TextEditingController(text: 'millie_map');
-    
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('Save Map', style: TextStyle(color: AppColors.textPrimary)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: const InputDecoration(
-            hintText: 'Map name',
-            hintStyle: TextStyle(color: AppColors.textMuted),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent),
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+    // Single map system - always saves to millie_map
+    setState(() => _loading = true);
+    final result = await widget.api.saveMap('millie_map');
+    setState(() => _loading = false);
+
+    _showSnackBar(
+      result.success ? 'Map saved' : 'Failed: ${result.message}',
+      result.success ? AppColors.success : AppColors.danger,
     );
-    
-    if (name != null && name.isNotEmpty) {
-      setState(() => _loading = true);
-      final result = await widget.api.saveMap(name);
-      setState(() => _loading = false);
-      
-      _showSnackBar(
-        result.success ? 'Map saved: $name' : 'Failed: ${result.message}',
-        result.success ? AppColors.success : AppColors.danger,
-      );
-      
-      await _refresh();
-    }
+
+    await _refresh();
   }
   
   Future<void> _selectMap(String name) async {

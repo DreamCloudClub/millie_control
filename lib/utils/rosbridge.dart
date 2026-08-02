@@ -92,7 +92,7 @@ class MapData {
   final double originX;     // world X of map origin
   final double originY;     // world Y of map origin
   final List<int> data;     // -1 = unknown, 0 = free, 100 = occupied
-  
+
   MapData({
     required this.width,
     required this.height,
@@ -101,6 +101,36 @@ class MapData {
     required this.originY,
     required this.data,
   });
+}
+
+/// Lane point in map coordinates
+class LanePoint {
+  final double x;
+  final double y;
+
+  LanePoint({required this.x, required this.y});
+
+  Map<String, dynamic> toJson() => {'x': x, 'y': y};
+
+  factory LanePoint.fromJson(Map<String, dynamic> json) => LanePoint(
+    x: (json['x'] as num).toDouble(),
+    y: (json['y'] as num).toDouble(),
+  );
+}
+
+/// A lane with ID and points
+class Lane {
+  final int id;
+  final List<LanePoint> points;
+
+  Lane({required this.id, required this.points});
+
+  factory Lane.fromJson(Map<String, dynamic> json) => Lane(
+    id: json['id'] as int,
+    points: (json['points'] as List)
+        .map((p) => LanePoint.fromJson(p as Map<String, dynamic>))
+        .toList(),
+  );
 }
 
 /// Saved navigation sequence
@@ -361,150 +391,6 @@ class UserProfile {
   );
 }
 
-/// A person the robot knows about
-class KnownPerson {
-  final String name;
-  final String relationship; // e.g., "owner", "friend", "coworker", "visitor"
-  final List<String> notes; // things to remember about this person
-  final String? interests; // their interests
-  final DateTime? lastSeen;
-
-  KnownPerson({
-    required this.name,
-    this.relationship = '',
-    this.notes = const [],
-    this.interests,
-    this.lastSeen,
-  });
-
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'relationship': relationship,
-    'notes': notes,
-    'interests': interests,
-    'last_seen': lastSeen?.toIso8601String(),
-  };
-
-  factory KnownPerson.fromJson(Map<String, dynamic> json) => KnownPerson(
-    name: json['name'] as String? ?? '',
-    relationship: json['relationship'] as String? ?? '',
-    notes: (json['notes'] as List<dynamic>?)?.map((n) => n as String).toList() ?? [],
-    interests: json['interests'] as String?,
-    lastSeen: json['last_seen'] != null ? DateTime.tryParse(json['last_seen'] as String) : null,
-  );
-
-  KnownPerson copyWith({
-    String? name,
-    String? relationship,
-    List<String>? notes,
-    String? interests,
-    DateTime? lastSeen,
-  }) => KnownPerson(
-    name: name ?? this.name,
-    relationship: relationship ?? this.relationship,
-    notes: notes ?? this.notes,
-    interests: interests ?? this.interests,
-    lastSeen: lastSeen ?? this.lastSeen,
-  );
-}
-
-/// A note/memory the robot has saved
-class MemoryNote {
-  final String id;
-  final String content;
-  final String category; // e.g., "observation", "preference", "fact", "event"
-  final DateTime createdAt;
-
-  MemoryNote({
-    required this.id,
-    required this.content,
-    this.category = 'general',
-    DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'content': content,
-    'category': category,
-    'created_at': createdAt.toIso8601String(),
-  };
-
-  factory MemoryNote.fromJson(Map<String, dynamic> json) => MemoryNote(
-    id: json['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
-    content: json['content'] as String? ?? '',
-    category: json['category'] as String? ?? 'general',
-    createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'] as String) ?? DateTime.now() : DateTime.now(),
-  );
-}
-
-/// Owner profile - notes about the primary user
-class OwnerProfile {
-  final List<String> notes;
-
-  OwnerProfile({
-    this.notes = const [],
-  });
-
-  bool get isEmpty => notes.isEmpty;
-
-  Map<String, dynamic> toJson() => {
-    'notes': notes,
-  };
-
-  factory OwnerProfile.fromJson(Map<String, dynamic> json) => OwnerProfile(
-    notes: (json['notes'] as List<dynamic>?)?.map((n) => n as String).toList() ?? [],
-  );
-
-  OwnerProfile copyWith({
-    List<String>? notes,
-  }) => OwnerProfile(
-    notes: notes ?? this.notes,
-  );
-}
-
-/// All memories the robot has
-class MemoryData {
-  final OwnerProfile owner;
-  final List<KnownPerson> people;
-  final List<MemoryNote> notes;
-
-  MemoryData({
-    OwnerProfile? owner,
-    this.people = const [],
-    this.notes = const [],
-  }) : owner = owner ?? OwnerProfile();
-
-  bool get isEmpty => owner.isEmpty && people.isEmpty && notes.isEmpty;
-
-  Map<String, dynamic> toJson() => {
-    'owner': owner.toJson(),
-    'people': people.map((p) => p.toJson()).toList(),
-    'notes': notes.map((n) => n.toJson()).toList(),
-  };
-
-  factory MemoryData.fromJson(Map<String, dynamic> json) => MemoryData(
-    owner: json['owner'] != null
-        ? OwnerProfile.fromJson(json['owner'] as Map<String, dynamic>)
-        : OwnerProfile(),
-    people: (json['people'] as List<dynamic>?)
-        ?.map((p) => KnownPerson.fromJson(p as Map<String, dynamic>))
-        .toList() ?? [],
-    notes: (json['notes'] as List<dynamic>?)
-        ?.map((n) => MemoryNote.fromJson(n as Map<String, dynamic>))
-        .toList() ?? [],
-  );
-
-  MemoryData copyWith({
-    OwnerProfile? owner,
-    List<KnownPerson>? people,
-    List<MemoryNote>? notes,
-  }) => MemoryData(
-    owner: owner ?? this.owner,
-    people: people ?? this.people,
-    notes: notes ?? this.notes,
-  );
-}
-
 class RosBridge {
   final String url;
   WebSocketChannel? _channel;
@@ -519,8 +405,8 @@ class RosBridge {
   List<ActionDefinition> actions = [];
   List<AgentDefinition> agents = [];
   List<HistoryEntry> history = [];
+  List<Lane> lanes = [];
   UserProfile? userProfile;
-  MemoryData? memories;
   RobotPose? currentPose;
   
   // ============================================================
@@ -536,9 +422,9 @@ class RosBridge {
   final List<void Function(LaserScan)> _laserScanListeners = [];
   LaserScan? _currentLaserScan;
   final List<void Function(UserProfile)> _userProfileListeners = [];
-  final List<void Function(MemoryData)> _memoryListeners = [];
   final List<void Function(List<HistoryEntry>)> _historyListeners = [];
   final List<void Function(String, int, int, List<Map<String, dynamic>>?)> _workflowStatusListeners = [];
+  final List<void Function(List<Lane>)> _lanesListeners = [];
 
   // Voice agent state
   bool _voiceAgentActive = false;
@@ -660,19 +546,6 @@ class RosBridge {
     _userProfileListeners.remove(callback);
   }
 
-  /// Add a memory listener. Receives current data immediately if available.
-  void addMemoryListener(void Function(MemoryData) callback) {
-    _memoryListeners.add(callback);
-    if (memories != null) {
-      print('📍 [MultiListener] New memory listener, sending cached memories');
-      callback(memories!);
-    }
-  }
-
-  void removeMemoryListener(void Function(MemoryData) callback) {
-    _memoryListeners.remove(callback);
-  }
-
   /// Direct access to current nav status
   NavStatus get currentNavStatus => _lastNavStatus;
   
@@ -698,6 +571,19 @@ class RosBridge {
 
   void removeWorkflowStatusListener(void Function(String, int, int, List<Map<String, dynamic>>?) callback) {
     _workflowStatusListeners.remove(callback);
+  }
+
+  /// Add a lanes listener. Receives current lanes immediately if available.
+  void addLanesListener(void Function(List<Lane>) callback) {
+    _lanesListeners.add(callback);
+    if (lanes.isNotEmpty) {
+      print('📍 [MultiListener] New lanes listener, sending ${lanes.length} cached lanes');
+      callback(lanes);
+    }
+  }
+
+  void removeLanesListener(void Function(List<Lane>) callback) {
+    _lanesListeners.remove(callback);
   }
 
   /// Add a voice agent listener. Receives current state immediately.
@@ -726,6 +612,8 @@ class RosBridge {
   void Function(bool)? onWanderStatus;  // true = active, false = disabled
   void Function(bool)? onPersonFollowerStatus;  // true = active, false = disabled
   void Function(bool)? onCenterOnHumanStatus;  // true = active, false = disabled
+  void Function(String key)? onApiKeyReceived;
+  void Function(Map<String, dynamic> status)? onApiKeyStatus;
 
   // Map callback with caching (map is latched, only sent once)
   MapData? _cachedMapData;
@@ -770,16 +658,6 @@ class RosBridge {
       print('📦 Loaded cached user profile: ${userProfile!.username}');
       for (final listener in _userProfileListeners) {
         listener(userProfile!);
-      }
-    }
-
-    // Load memories
-    final cachedMemories = await LocalCacheService.loadMemories();
-    if (cachedMemories != null) {
-      memories = cachedMemories;
-      print('📦 Loaded cached memories');
-      for (final listener in _memoryListeners) {
-        listener(memories!);
       }
     }
 
@@ -834,8 +712,8 @@ class RosBridge {
       // Subscribe to user profile
       _subscribe('/millie/user_profile', 'std_msgs/msg/String');
 
-      // Subscribe to memories
-      _subscribe('/millie/memories', 'std_msgs/msg/String');
+      // Subscribe to lanes data
+      _subscribe('/millie/lanes', 'std_msgs/msg/String');
 
       // Subscribe to workflow status
       _subscribe('/millie/workflow/status', 'std_msgs/msg/String');
@@ -854,6 +732,15 @@ class RosBridge {
 
       // Subscribe to center on human status
       _subscribe('/center_on_human/status', 'std_msgs/msg/String');
+
+      // Subscribe to API key topics
+      _subscribe('/millie/api_key', 'std_msgs/msg/String');
+      _subscribe('/millie/api_key/status', 'std_msgs/msg/String');
+
+      // Request API key from robot on connect
+      Future.delayed(const Duration(milliseconds: 500), () {
+        requestApiKey();
+      });
 
       // Subscribe to map with TRANSIENT_LOCAL QoS to receive latched map
       _subscribeWithQos('/map', 'nav_msgs/msg/OccupancyGrid', durability: 'transient_local');
@@ -953,8 +840,8 @@ class RosBridge {
           _handleAgentsMessage(msg['msg']);
         } else if (topic == '/millie/user_profile') {
           _handleUserProfileMessage(msg['msg']);
-        } else if (topic == '/millie/memories') {
-          _handleMemoriesMessage(msg['msg']);
+        } else if (topic == '/millie/lanes') {
+          _handleLanesMessage(msg['msg']);
         } else if (topic == '/millie/workflow/status') {
           _handleWorkflowStatusMessage(msg['msg']);
         } else if (topic == '/millie/voice_agent/status') {
@@ -967,6 +854,10 @@ class RosBridge {
           _handlePersonFollowerStatusMessage(msg['msg']);
         } else if (topic == '/center_on_human/status') {
           _handleCenterOnHumanStatusMessage(msg['msg']);
+        } else if (topic == '/millie/api_key') {
+          _handleApiKeyMessage(msg['msg']);
+        } else if (topic == '/millie/api_key/status') {
+          _handleApiKeyStatus(msg['msg']);
         } else if (topic == '/map') {
           _handleMapMessage(msg['msg']);
         } else if (topic == '/navigate_to_pose/_action/status') {
@@ -1151,6 +1042,32 @@ class RosBridge {
     }
   }
 
+  void _handleApiKeyMessage(Map<String, dynamic> msg) {
+    final key = msg['data'] as String? ?? '';
+    if (key.isNotEmpty) {
+      final prefix = key.length > 15 ? '${key.substring(0, 7)}...${key.substring(key.length - 4)}' : '***';
+      print("🔑 [RosBridge] API key received: $prefix - saving locally");
+      // Auto-save to local cache
+      LocalCacheService.saveOpenAIApiKey(key);
+      onApiKeyReceived?.call(key);
+    }
+  }
+
+  void _handleApiKeyStatus(Map<String, dynamic> msg) {
+    final data = msg['data'] as String? ?? '';
+    if (data.isNotEmpty) {
+      try {
+        final status = jsonDecode(data) as Map<String, dynamic>;
+        final isSet = status['is_set'] as bool? ?? false;
+        final prefix = status['key_prefix'] as String? ?? '';
+        print("🔑 [RosBridge] API key status: isSet=$isSet, prefix=$prefix");
+        onApiKeyStatus?.call(status);
+      } catch (e) {
+        print("⚠️ Error parsing API key status: $e");
+      }
+    }
+  }
+
   void _handleWaypointsMessage(Map<String, dynamic> msg) {
     try {
       final data = jsonDecode(msg['data']);
@@ -1297,24 +1214,30 @@ class RosBridge {
     }
   }
 
-  void _handleMemoriesMessage(Map<String, dynamic> msg) {
+  void _handleLanesMessage(Map<String, dynamic> msg) {
     try {
-      final data = jsonDecode(msg['data']);
-      final memoryData = data['memories'] as Map<String, dynamic>?;
-      if (memoryData != null) {
-        memories = MemoryData.fromJson(memoryData);
-
-        // Save to local cache
-        LocalCacheService.saveMemories(memories!);
-
-        print('📍 [RosBridge] Memories updated: ${memories!.owner.notes.length} owner notes, ${memories!.people.length} people, ${memories!.notes.length} notes');
-
-        for (final listener in _memoryListeners) {
-          listener(memories!);
+      final dataStr = msg['data'] as String;
+      if (dataStr.isEmpty) {
+        lanes = [];
+      } else {
+        final data = jsonDecode(dataStr);
+        final lanesList = data['lanes'] as List?;
+        if (lanesList != null) {
+          lanes = lanesList
+              .map((l) => Lane.fromJson(l as Map<String, dynamic>))
+              .toList();
+        } else {
+          lanes = [];
         }
       }
+
+      print('📍 [RosBridge] Lanes updated: ${lanes.length} lanes, notifying ${_lanesListeners.length} listeners');
+
+      for (final listener in _lanesListeners) {
+        listener(lanes);
+      }
     } catch (e) {
-      print("⚠️ Error parsing memories: $e");
+      print("⚠️ Error parsing lanes: $e");
     }
   }
 
@@ -1488,33 +1411,22 @@ class RosBridge {
     _channel!.sink.add(jsonEncode(msg));
   }
   
-  /// Send a navigation goal to Nav2
+  /// Send a navigation goal via nav_command_node (uses lanes if available)
   void publishNavGoal(double x, double y, {double theta = 0.0}) {
     if (!_connected || _channel == null) {
       print("⚠️ Not connected to ROSBridge, skipping nav goal");
       return;
     }
-    
-    // Convert theta to quaternion (rotation around Z axis only)
-    final double qz = _sin(theta / 2);
-    final double qw = _cos(theta / 2);
-    
-    final msg = {
-      "op": "publish",
-      "topic": "/goal_pose",
-      "msg": {
-        "header": {
-          "frame_id": "map",
-        },
-        "pose": {
-          "position": {"x": x, "y": y, "z": 0.0},
-          "orientation": {"x": 0.0, "y": 0.0, "z": qz, "w": qw}
-        }
-      }
-    };
-    
-    print("🎯 Sending nav goal: ($x, $y, θ=$theta)");
-    _channel!.sink.add(jsonEncode(msg));
+
+    // Route through nav_command_node so it can use lanes
+    final json = jsonEncode({
+      'x': x,
+      'y': y,
+      'theta': theta,
+    });
+
+    print("🎯 Sending nav goal via nav_command: ($x, $y, θ=$theta)");
+    _publishSimple("/millie/nav/goal", json);
   }
   
   /// Set initial pose estimate (for slam_toolbox localization)
@@ -1707,38 +1619,49 @@ class RosBridge {
     _publishSimple("/millie/user_profile/list", "");
   }
 
-  /// Save memories to the robot
-  void publishSaveMemories(MemoryData memoryData) {
-    final json = jsonEncode(memoryData.toJson());
-    print("📤 Publishing memories");
-    _publishSimple("/millie/memories/save", json);
+  /// Add a new lane (list of map coordinate points)
+  void publishAddLane(List<LanePoint> points) {
+    final json = jsonEncode({
+      'points': points.map((p) => p.toJson()).toList(),
+    });
+    _publishSimple("/millie/lanes/add", json);
   }
 
-  /// Request memories from robot
-  void requestMemories() {
-    _publishSimple("/millie/memories/list", "");
+  /// Delete a lane by ID
+  void publishDeleteLane(int laneId) {
+    final json = jsonEncode({'id': laneId});
+    _publishSimple("/millie/lanes/delete", json);
   }
 
   /// Cancel current navigation - calls Nav2 cancel service directly
   void publishCancelNav() {
     if (!_connected || _channel == null) return;
-    
-    // Call the Nav2 action cancel service directly via rosbridge
-    // UUID of all zeros = cancel ALL active goals
-    final cancelMsg = {
+
+    // Cancel args - UUID of all zeros = cancel ALL active goals
+    final cancelArgs = {
+      "goal_info": {
+        "goal_id": {"uuid": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
+        "stamp": {"sec": 0, "nanosec": 0}
+      }
+    };
+
+    // Cancel NavigateToPose action
+    _channel!.sink.add(jsonEncode({
       "op": "call_service",
       "service": "/navigate_to_pose/_action/cancel_goal",
       "type": "action_msgs/srv/CancelGoal",
-      "args": {
-        "goal_info": {
-          "goal_id": {"uuid": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]},
-          "stamp": {"sec": 0, "nanosec": 0}
-        }
-      }
-    };
-    _channel!.sink.add(jsonEncode(cancelMsg));
-    
-    print("🛑 Cancelling navigation");
+      "args": cancelArgs
+    }));
+
+    // Cancel NavigateThroughPoses action (used for lane navigation)
+    _channel!.sink.add(jsonEncode({
+      "op": "call_service",
+      "service": "/navigate_through_poses/_action/cancel_goal",
+      "type": "action_msgs/srv/CancelGoal",
+      "args": cancelArgs
+    }));
+
+    print("🛑 Cancelling navigation (both actions)");
   }
   
   /// Emergency stop - cancel ALL autonomous movement
@@ -1913,6 +1836,14 @@ class RosBridge {
     // Status update comes from ROS node via /center_on_human/status subscription
   }
 
+  // ✅ Voice settings
+  void publishVoiceIdleTimeout(int seconds) => _publishInt("/millie/voice_idle_timeout", seconds);
+
+  // ✅ API Key settings
+  void publishSaveApiKey(String apiKey) => _publishSimple("/millie/api_key/save", apiKey);
+  void requestApiKeyStatus() => _publishSimple("/millie/api_key/request", "status");
+  void requestApiKey() => _publishSimple("/millie/api_key/request", "key");
+
   /// Disable explore mode
   void disableExploreMode() {
     publishWanderDisable();
@@ -1936,6 +1867,20 @@ class RosBridge {
 
   // ✅ shared helpers
   void _publishBool(String topic, bool data) {
+    if (_channel == null) {
+      print("⚠️ Not connected to ROSBridge, skipping publish for $topic");
+      return;
+    }
+    final msg = {
+      "op": "publish",
+      "topic": topic,
+      "msg": {"data": data}
+    };
+    _channel!.sink.add(jsonEncode(msg));
+    print("📤 Sent to $topic: $data");
+  }
+
+  void _publishInt(String topic, int data) {
     if (_channel == null) {
       print("⚠️ Not connected to ROSBridge, skipping publish for $topic");
       return;
