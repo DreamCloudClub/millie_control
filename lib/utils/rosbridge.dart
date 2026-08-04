@@ -1668,8 +1668,14 @@ class RosBridge {
     // Disable explore mode (wander + motion detector)
     disableExploreMode();
 
+    // Cancel any running workflow (must be before Nav2 cancel)
+    publishWorkflowCancel();
+
     // Cancel Nav2 navigation via service call
     publishCancelNav();
+
+    // Also notify nav_command_node to cancel (updates nav status)
+    _publishSimple("/millie/nav/cancel", "cancel");
 
     // Publish pause mode to stop all autonomous behaviors
     _publishSimple("/millie/mode", "pause");
